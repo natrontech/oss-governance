@@ -8,7 +8,11 @@ export const APP_SLUG = "natron-oss-governance";
 // Name of this repository, of the ruleset it manages and prefix of the sync branch
 export const NAME = "oss-governance";
 
-export const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+// Octokit logs every failed request, including the expected 404s, while real failures are thrown and reported by the sync
+export const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN,
+  log: { debug: () => {}, info: () => {}, warn: console.warn, error: () => {} },
+});
 
 export type LiveRepo = Awaited<ReturnType<typeof octokit.rest.repos.listForOrg>>["data"][number];
 

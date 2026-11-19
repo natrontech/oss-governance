@@ -10,10 +10,14 @@ import { planSettings } from "./settings.ts";
 
 const mode = process.argv[2];
 if (mode !== "plan" && mode !== "apply" && mode !== "generate") {
-  console.error("usage: node src/cli.ts plan|apply|generate");
+  console.error("usage: node src/cli.ts plan|apply|generate [repository...]");
   process.exit(2);
 }
 const apply = mode === "apply";
+
+// A run limited to some repositories leaves the org-wide archive moves and governance issues alone
+const only = process.argv.slice(3);
+const partial = only.length > 0;
 
 // An invalid config is a mistake in a file, so it is reported without a stack trace
 let loaded: ReturnType<typeof loadConfig>;
@@ -24,6 +28,11 @@ try {
   process.exit(1);
 }
 const { config, repos, ignored } = loaded;
+const unknown = only.filter((name) => !repos.some((repo) => repo.name === name));
+if (unknown.length > 0) {
+  console.error(`Not listed in repos/: ${unknown.join(", ")}`);
+  process.exit(2);
+}
 
 // The inventory and the editor schemas only depend on the config files, so they are generated without asking GitHub
 if (mode === "generate") {
@@ -59,7 +68,7 @@ console.log(`## Governance ${apply ? "sync" : "plan"}`);
 
 // Compare the listed repositories with the public repositories of the organization
 const live = await octokit.paginate(octokit.rest.repos.listForOrg, { org: ORG, type: "public" });
-const { problems, moves } = reconcile(repos, Object.keys(ignored), live);
+const { problems, moves } = partial ? { problems: [], moves: [] } : reconcile(repos, Object.keys(ignored), live);
 
 // Follow manual archiving on GitHub by moving the repository's file in one commit together with the inventory
 await section("Archive", async () => {
@@ -105,7 +114,7 @@ const trackers = await octokit.paginate(octokit.rest.issues.listForRepo, {
 // Sync every active repository on its own
 for (const repo of repos) {
   const liveRepo = live.find((candidate) => candidate.name === repo.name);
-  if (!liveRepo || liveRepo.archived) {
+  if (!liveRepo || liveRepo.archived || (partial && !only.includes(repo.name))) {
     continue;
   }
   try {
@@ -138,8 +147,8 @@ for (const repo of repos) {
 if (problems.length > 0) {
   console.log(`\n### Problems\n\n${problems.map((problem) => `- ${problem.title}`).join("\n")}`);
 }
-if (apply) {
+if (apply && !partial) {
   await section("Issues", async () => ({ actions: await planProblems(problems) }));
-} else if (problems.length > 0) {
+} else if (!apply && problems.length > 0) {
   process.exit(1);
 }

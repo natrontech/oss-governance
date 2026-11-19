@@ -6,6 +6,15 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Only print what would change, without changing anything
+        type: boolean
+        default: true
+      repos:
+        description: Space-separated repositories to limit the run to, empty for all
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -41,13 +50,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Rollout: this stays on plan until the plan across all repositories was reviewed, then it becomes apply
+      # Rollout: only a manual run without dry run applies until the pilot succeeded, then automatic runs apply too
       - name: Sync
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry-run && 'apply' || 'plan' }}
+          REPOS: ${{ inputs.repos }}
         # Explicit bash adds pipefail, so a failing sync is not hidden behind tee
         shell: bash
-        run: node src/cli.ts plan | tee -a "$GITHUB_STEP_SUMMARY"
+        # REPOS is left unquoted on purpose so that each repository becomes its own argument
+        run: node src/cli.ts "$MODE" $REPOS | tee -a "$GITHUB_STEP_SUMMARY"
 
       # GitHub only mails the last editor of this file about a failed scheduled run
       # The next successful sync closes the issue again because no problem carries its title
