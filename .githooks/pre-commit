@@ -1,5 +1,5 @@
 #!/bin/sh
-# Keep the generated inventory in step with the repository files of the same commit
+# Validate the config against the schema and keep the generated inventory in step with it
 set -e
 node src/cli.ts inventory
 git add INVENTORY.md

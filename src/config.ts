@@ -45,7 +45,7 @@ export type Repo = {
 export function resolveRepo(config: Config, name: string, archived: boolean, raw: z.infer<typeof repoSchema>): Repo {
   const tier = config.tiers[raw.tier];
   if (!tier) {
-    throw new Error(`${name}: unknown tier ${raw.tier}`);
+    throw new Error(`${repoFile(name, archived)}: unknown tier ${raw.tier}`);
   }
   return {
     name,
@@ -59,7 +59,14 @@ export function resolveRepo(config: Config, name: string, archived: boolean, raw
 }
 
 function readYaml<T>(schema: z.ZodType<T>, path: string): T {
-  const result = schema.safeParse(parse(readFileSync(path, "utf8")));
+  // A syntax error names a line but not the file, so the path is added here
+  let content: unknown;
+  try {
+    content = parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`${path}: ${error instanceof Error ? error.message : error}`);
+  }
+  const result = schema.safeParse(content);
   if (!result.success) {
     throw new Error(`${path}: ${z.prettifyError(result.error)}`);
   }

@@ -60,11 +60,11 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 `plan` only reads.
 `pnpm install` also sets up the git hooks in `.githooks`:
 
-- `pre-commit` regenerates `INVENTORY.md` with `pnpm inventory` and adds it to the commit
+- `pre-commit` validates every YAML file against the schema in `src/config.ts`, regenerates `INVENTORY.md` with `pnpm inventory` and adds it to the commit
 - `commit-msg` requires a [Conventional Commits](https://www.conventionalcommits.org) subject
 - `pre-push` runs the typecheck and the tests
 
-The `Plan` check fails a pull request whose inventory is out of date, which catches commits made without the hooks, such as edits in the GitHub web editor.
+The `Plan` check runs the same validation and fails a pull request whose inventory is out of date, which catches commits made without the hooks, such as edits in the GitHub web editor.
 `node src/cli.ts apply` makes the changes and is meant to be run by the `Sync` workflow only.
 
 ## Setup

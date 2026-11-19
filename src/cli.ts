@@ -13,7 +13,16 @@ if (mode !== "plan" && mode !== "apply" && mode !== "inventory") {
   process.exit(2);
 }
 const apply = mode === "apply";
-const { config, repos, ignored } = loadConfig();
+
+// An invalid config is a mistake in a file, so it is reported without a stack trace
+let loaded: ReturnType<typeof loadConfig>;
+try {
+  loaded = loadConfig();
+} catch (error) {
+  console.error(`Invalid config: ${error instanceof Error ? error.message : error}`);
+  process.exit(1);
+}
+const { config, repos, ignored } = loaded;
 
 // The inventory only depends on the config files, so it is regenerated without asking GitHub
 if (mode === "inventory") {
