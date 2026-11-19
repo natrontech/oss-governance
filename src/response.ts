@@ -1,5 +1,5 @@
 import type { Repo } from "./config.ts";
-import { type Action, NAME, ORG, mentions, octokit } from "./github.ts";
+import { type Action, mentions, NAME, ORG, octokit } from "./github.ts";
 
 export const RESPONSE_LABEL = "response-time";
 
@@ -11,12 +11,7 @@ type Tracker = { number: number; title: string; body?: string | null };
 const INTERNAL = new Set<string | undefined>(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 // Whether a request opened at the given time needs attention, counting Monday to Friday without public holidays
-export function responseStatus(
-  opened: Date,
-  now: Date,
-  responseDays: number,
-  warningDays: number,
-): Status | undefined {
+export function responseStatus(opened: Date, now: Date, responseDays: number, warningDays: number): Status | undefined {
   let elapsed = 0;
   const day = new Date(Date.UTC(opened.getUTCFullYear(), opened.getUTCMonth(), opened.getUTCDate() + 1));
   for (; day <= now; day.setUTCDate(day.getUTCDate() + 1)) {
@@ -100,7 +95,8 @@ export async function planResponse(repo: Repo, warningDays: number, trackers: Tr
     "| Request | Opened | Status |",
     "| --- | --- | --- |",
     ...items.map(
-      (item) => `| [#${item.number} ${item.title.replaceAll("|", "\\|")}](${item.url}) | ${item.opened} | ${item.status} |`,
+      (item) =>
+        `| [#${item.number} ${item.title.replaceAll("|", "\\|")}](${item.url}) | ${item.opened} | ${item.status} |`,
     ),
     "",
     `<!-- state: ${JSON.stringify(state)} -->`,

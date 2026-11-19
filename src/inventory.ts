@@ -12,7 +12,7 @@ export function renderInventory(repos: Repo[], ignored: Record<string, string>):
       repo.archived ? "archived" : "active",
     ]),
     ...Object.entries(ignored).map(([name, reason]) => [name, "", "", "", "", `not managed: ${reason}`]),
-  ].sort((a, b) => a[0]!.localeCompare(b[0]!));
+  ].sort(([a], [b]) => a.localeCompare(b));
 
   return [
     "# Repository inventory",

@@ -4,10 +4,10 @@ import {
   type Action,
   APP_SLUG,
   type LiveRepo,
+  mentions,
   NAME,
   ORG,
   OWNERS_TEAM,
-  mentions,
   octokit,
   orNull,
   teamSlug,
@@ -65,7 +65,8 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
   }
 
   const paths = [...desired.keys()];
-  const differing = (files: Map<string, string | null>) => paths.filter((path) => files.get(path) !== desired.get(path));
+  const differing = (files: Map<string, string | null>) =>
+    paths.filter((path) => files.get(path) !== desired.get(path));
   const changed = differing(await readFiles(repo.name, "HEAD", paths));
   const { data: pulls } = await octokit.rest.pulls.list({ ...target, head: `${ORG}:${BRANCH}`, state: "open" });
   const pull = pulls[0];

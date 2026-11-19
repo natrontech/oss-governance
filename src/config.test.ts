@@ -39,7 +39,8 @@ test("an unknown tier is rejected", () => {
 });
 
 test("reconcile reports unlisted and missing repositories and follows archiving", () => {
-  const repo = (name: string, archived: boolean) => resolveRepo(config, name, archived, { tier: "tier-1", maintainers: [] });
+  const repo = (name: string, archived: boolean) =>
+    resolveRepo(config, name, archived, { tier: "tier-1", maintainers: [] });
   const { problems, moves } = reconcile(
     [repo("active", false), repo("now-archived", false), repo("revived", true), repo("gone", false)],
     ["fork"],

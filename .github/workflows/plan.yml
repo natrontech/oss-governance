@@ -31,15 +31,18 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Test
         run: pnpm test
 
       # The pre-commit hook does the same, but it does not run for web edits or skipped hooks
       - name: Validate the config against the schema
-        run: pnpm inventory
+        run: pnpm generate
 
-      - name: Check the inventory is current
-        run: git diff --exit-code INVENTORY.md
+      - name: Check the generated files are current
+        run: git diff --exit-code INVENTORY.md schemas
 
       # Pull requests from forks get no secrets, so the plan only runs for branches of this repository
       # The plan only reads, so the code of the pull request never holds a token that can change anything

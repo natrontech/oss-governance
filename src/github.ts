@@ -1,4 +1,5 @@
-import { Octokit, RequestError } from "octokit";
+import { RequestError } from "@octokit/request-error";
+import { Octokit } from "@octokit/rest";
 
 export const ORG = "natrontech";
 export const OWNERS_TEAM = "open-source-owners";

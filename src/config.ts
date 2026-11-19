@@ -4,29 +4,46 @@ import { parse } from "yaml";
 import { z } from "zod";
 
 const rulesetSchema = z.strictObject({
-  requiredApprovals: z.number().int().min(0).max(10),
-  signedCommits: z.boolean(),
-  codeOwnerReview: z.boolean(),
+  requiredApprovals: z.number().int().min(0).max(10).describe("Approvals a pull request needs before it can be merged"),
+  signedCommits: z.boolean().describe("Require verified signatures on every commit of the default branch"),
+  codeOwnerReview: z.boolean().describe("Require an approval from a code owner of the changed files"),
 });
 
-const responseDaysSchema = z.number().int().positive().nullable();
+const licenseSchema = z.string().describe("SPDX identifier of the license, such as Apache-2.0");
 
-const configSchema = z.strictObject({
+const responseDaysSchema = z
+  .number()
+  .int()
+  .positive()
+  .nullable()
+  .describe("Working days until a qualified first response to external issues and pull requests, null for best effort");
+
+export const configSchema = z.strictObject({
   ruleset: rulesetSchema,
-  syncPrReminderDays: z.number().int().positive(),
-  responseWarningDays: z.number().int().min(0),
-  tiers: z.record(z.string(), z.strictObject({ license: z.string(), responseDays: responseDaysSchema })),
+  syncPrReminderDays: z
+    .number()
+    .int()
+    .positive()
+    .describe("Days after which an open sync pull request gets a reminder"),
+  responseWarningDays: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Working days before the response deadline at which maintainers are notified"),
+  tiers: z.record(z.string(), z.strictObject({ license: licenseSchema, responseDays: responseDaysSchema })),
 });
 
-const repoSchema = z.strictObject({
+export const repoSchema = z.strictObject({
   tier: z.string(),
-  maintainers: z.array(z.string()),
-  license: z.string().optional(),
+  maintainers: z
+    .array(z.string())
+    .describe("GitHub users who are members of natrontech, or teams written as natrontech/<slug>"),
+  license: licenseSchema.optional(),
   responseDays: responseDaysSchema.optional(),
-  ruleset: rulesetSchema.partial().optional(),
+  ruleset: rulesetSchema.partial().optional().describe("Overrides of the org-wide ruleset in config.yaml"),
 });
 
-const ignoredSchema = z.record(z.string(), z.string().min(1));
+export const ignoredSchema = z.record(z.string(), z.string().min(1).describe("Why the repository is not managed"));
 
 export type Config = z.infer<typeof configSchema>;
 export type Ruleset = z.infer<typeof rulesetSchema>;

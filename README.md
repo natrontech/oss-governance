@@ -60,12 +60,14 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 `plan` only reads.
 `pnpm install` also sets up the git hooks in `.githooks`:
 
-- `pre-commit` validates every YAML file against the schema in `src/config.ts`, regenerates `INVENTORY.md` with `pnpm inventory` and adds it to the commit
+- `pre-commit` validates every YAML file against the schema in `src/config.ts`, regenerates `INVENTORY.md` and `schemas/` with `pnpm generate` and checks the staged files with Biome
 - `commit-msg` requires a [Conventional Commits](https://www.conventionalcommits.org) subject
 - `pre-push` runs the typecheck and the tests
 
-The `Plan` check runs the same validation and fails a pull request whose inventory is out of date, which catches commits made without the hooks, such as edits in the GitHub web editor.
-`node src/cli.ts apply` makes the changes and is meant to be run by the `Sync` workflow only.
+The `Plan` check runs the same steps and fails a pull request whose generated files are out of date, which catches commits made without the hooks, such as edits in the GitHub web editor.
+
+`pnpm format` formats and fixes the code with [Biome](https://biomejs.dev).
+The JSON Schemas in `schemas/` give editors completion and validation for the YAML files; VS Code picks them up through `.vscode/settings.json`.
 
 ## Setup
 

@@ -1,0 +1,8 @@
+{
+  "yaml.schemas": {
+    "./schemas/config.schema.json": "config.yaml",
+    "./schemas/ignored.schema.json": "ignored.yaml",
+    "./schemas/repo.schema.json": "repos/**/*.yaml"
+  },
+  "editor.defaultFormatter": "biomejs.biome"
+}

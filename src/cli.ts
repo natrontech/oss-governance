@@ -4,12 +4,13 @@ import { planFiles } from "./files.ts";
 import { type Action, APP_SLUG, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
 import { renderInventory } from "./inventory.ts";
 import { maintainerProblems, planProblems } from "./problems.ts";
-import { RESPONSE_LABEL, planResponse } from "./response.ts";
+import { planResponse, RESPONSE_LABEL } from "./response.ts";
+import { renderSchemas } from "./schema.ts";
 import { planSettings } from "./settings.ts";
 
 const mode = process.argv[2];
-if (mode !== "plan" && mode !== "apply" && mode !== "inventory") {
-  console.error("usage: node src/cli.ts plan|apply|inventory");
+if (mode !== "plan" && mode !== "apply" && mode !== "generate") {
+  console.error("usage: node src/cli.ts plan|apply|generate");
   process.exit(2);
 }
 const apply = mode === "apply";
@@ -24,9 +25,13 @@ try {
 }
 const { config, repos, ignored } = loaded;
 
-// The inventory only depends on the config files, so it is regenerated without asking GitHub
-if (mode === "inventory") {
+// The inventory and the editor schemas only depend on the config files, so they are generated without asking GitHub
+if (mode === "generate") {
   writeFileSync("INVENTORY.md", renderInventory(repos, ignored));
+  mkdirSync("schemas", { recursive: true });
+  for (const [path, content] of renderSchemas(config)) {
+    writeFileSync(path, content);
+  }
   process.exit(0);
 }
 

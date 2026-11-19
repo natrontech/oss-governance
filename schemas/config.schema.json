@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ruleset": {
+      "type": "object",
+      "properties": {
+        "requiredApprovals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Approvals a pull request needs before it can be merged"
+        },
+        "signedCommits": {
+          "type": "boolean",
+          "description": "Require verified signatures on every commit of the default branch"
+        },
+        "codeOwnerReview": {
+          "type": "boolean",
+          "description": "Require an approval from a code owner of the changed files"
+        }
+      },
+      "required": [
+        "requiredApprovals",
+        "signedCommits",
+        "codeOwnerReview"
+      ],
+      "additionalProperties": false
+    },
+    "syncPrReminderDays": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Days after which an open sync pull request gets a reminder"
+    },
+    "responseWarningDays": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Working days before the response deadline at which maintainers are notified"
+    },
+    "tiers": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "license": {
+            "type": "string",
+            "description": "SPDX identifier of the license, such as Apache-2.0"
+          },
+          "responseDays": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Working days until a qualified first response to external issues and pull requests, null for best effort"
+          }
+        },
+        "required": [
+          "license",
+          "responseDays"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "ruleset",
+    "syncPrReminderDays",
+    "responseWarningDays",
+    "tiers"
+  ],
+  "additionalProperties": false
+}

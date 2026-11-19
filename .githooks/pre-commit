@@ -1,5 +1,8 @@
 #!/bin/sh
-# Validate the config against the schema and keep the generated inventory in step with it
+# Validate the config against the schema and keep the generated inventory and editor schemas in step with it
 set -e
-node src/cli.ts inventory
-git add INVENTORY.md
+node src/cli.ts generate
+git add INVENTORY.md schemas
+
+# Only the staged files are checked, so unrelated work in progress does not block the commit
+pnpm -s exec biome check --staged --no-errors-on-unmatched

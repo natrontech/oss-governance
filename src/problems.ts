@@ -22,7 +22,9 @@ function exists(maintainer: string): Promise<boolean> {
 // A repository without a reachable maintainer is the first sunset criterion of the concept
 export async function maintainerProblems(repo: Repo): Promise<Problem[]> {
   if (repo.maintainers.length === 0) {
-    return [{ title: `${repo.name}: no maintainer`, body: `Name at least one maintainer in \`repos/${repo.name}.yaml\`.` }];
+    return [
+      { title: `${repo.name}: no maintainer`, body: `Name at least one maintainer in \`repos/${repo.name}.yaml\`.` },
+    ];
   }
   const problems: Problem[] = [];
   for (const maintainer of repo.maintainers) {
