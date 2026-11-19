@@ -52,7 +52,7 @@ export async function planProblems(problems: Problem[]): Promise<Action[]> {
           octokit.rest.issues.create({
             ...target,
             title: problem.title,
-            body: `${problem.body}\n\n@${ORG}/${OWNERS_TEAM}`,
+            body: problem.body,
             labels: [LABEL],
             assignees: await assigneesOf([`${ORG}/${OWNERS_TEAM}`]),
           }),

@@ -82,6 +82,4 @@ jobs:
             assignees+=(-f "assignees[]=$login")
           done
           gh api "repos/$GITHUB_REPOSITORY/issues" -f title="Sync run failed" -f "labels[]=governance" "${assignees[@]}" \
-            -f body="The sync run failed: $RUN_URL
-
-          @natrontech/open-source-owners"
+            -f body="The sync run failed: $RUN_URL"
