@@ -1,0 +1,5 @@
+# Public repositories that are deliberately not managed, each with the reason why
+CIPP: fork of KelvinTegelaar/CIPP
+CIPP-API: fork of KelvinTegelaar/CIPP-API
+packer-plugin-proxmox: fork of hashicorp/packer-plugin-proxmox
+assets: brand assets under a custom license

@@ -1,0 +1,62 @@
+name: Plan
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    # Pull requests from forks get no secrets, so the plan cannot run for them
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      # The plan only reads, so the code of the pull request never holds a token that can change anything
+      - name: Create read-only app token
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: natrontech
+          permission-administration: read
+          permission-contents: read
+          permission-issues: read
+          permission-members: read
+          permission-pull-requests: read
+
+      - name: Plan
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: node src/cli.ts plan | tee plan.md
+
+      - name: Comment the plan
+        if: always() && hashFiles('plan.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file plan.md --edit-last --create-if-none

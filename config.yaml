@@ -1,0 +1,24 @@
+# Default branch ruleset of every managed repository
+# A repository can override single values in its own file
+ruleset:
+  requiredApprovals: 1
+  signedCommits: true
+  codeOwnerReview: false
+
+# Days after which an open sync pull request gets a reminder
+syncPrReminderDays: 7
+
+# Working days before the response deadline at which maintainers are notified
+responseWarningDays: 2
+
+# responseDays are working days until a qualified first response, null means best effort
+tiers:
+  tier-1:
+    license: Apache-2.0
+    responseDays: 5
+  tier-2:
+    license: Apache-2.0
+    responseDays: 10
+  tier-3:
+    license: CC-BY-SA-4.0
+    responseDays: null

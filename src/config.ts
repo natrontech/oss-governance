@@ -1,0 +1,147 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parse } from "yaml";
+import { z } from "zod";
+
+const rulesetSchema = z.strictObject({
+  requiredApprovals: z.number().int().min(0).max(10),
+  signedCommits: z.boolean(),
+  codeOwnerReview: z.boolean(),
+});
+
+const responseDaysSchema = z.number().int().positive().nullable();
+
+const configSchema = z.strictObject({
+  ruleset: rulesetSchema,
+  syncPrReminderDays: z.number().int().positive(),
+  responseWarningDays: z.number().int().min(0),
+  tiers: z.record(z.string(), z.strictObject({ license: z.string(), responseDays: responseDaysSchema })),
+});
+
+const repoSchema = z.strictObject({
+  tier: z.string(),
+  maintainers: z.array(z.string()),
+  license: z.string().optional(),
+  responseDays: responseDaysSchema.optional(),
+  ruleset: rulesetSchema.partial().optional(),
+});
+
+const ignoredSchema = z.record(z.string(), z.string().min(1));
+
+export type Config = z.infer<typeof configSchema>;
+export type Ruleset = z.infer<typeof rulesetSchema>;
+
+export type Repo = {
+  name: string;
+  archived: boolean;
+  tier: string;
+  maintainers: string[];
+  license: string;
+  responseDays: number | null;
+  ruleset: Ruleset;
+};
+
+// Applies the tier and the org-wide ruleset below the values a repository sets itself
+export function resolveRepo(config: Config, name: string, archived: boolean, raw: z.infer<typeof repoSchema>): Repo {
+  const tier = config.tiers[raw.tier];
+  if (!tier) {
+    throw new Error(`${name}: unknown tier ${raw.tier}`);
+  }
+  return {
+    name,
+    archived,
+    tier: raw.tier,
+    maintainers: raw.maintainers,
+    license: raw.license ?? tier.license,
+    responseDays: raw.responseDays === undefined ? tier.responseDays : raw.responseDays,
+    ruleset: { ...config.ruleset, ...raw.ruleset },
+  };
+}
+
+function readYaml<T>(schema: z.ZodType<T>, path: string): T {
+  const result = schema.safeParse(parse(readFileSync(path, "utf8")));
+  if (!result.success) {
+    throw new Error(`${path}: ${z.prettifyError(result.error)}`);
+  }
+  return result.data;
+}
+
+export function repoFile(name: string, archived: boolean): string {
+  return join("repos", archived ? "archived" : "", `${name}.yaml`);
+}
+
+export function loadConfig(): { config: Config; repos: Repo[]; ignored: Record<string, string> } {
+  const config = readYaml(configSchema, "config.yaml");
+  const ignored = readYaml(ignoredSchema, "ignored.yaml");
+
+  // Read the active and the archived folder with the same schema
+  const repos: Repo[] = [];
+  for (const archived of [false, true]) {
+    const dir = join("repos", archived ? "archived" : "");
+    if (!existsSync(dir)) {
+      continue;
+    }
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith(".yaml")) {
+        continue;
+      }
+      const name = file.slice(0, -".yaml".length);
+      repos.push(resolveRepo(config, name, archived, readYaml(repoSchema, join(dir, file))));
+    }
+  }
+
+  // A repository listed twice would be synced with whichever entry happens to be read last
+  const names = [...repos.map((repo) => repo.name), ...Object.keys(ignored)];
+  const duplicate = names.find((name, index) => names.indexOf(name) !== index);
+  if (duplicate) {
+    throw new Error(`${duplicate} is listed more than once`);
+  }
+
+  return { config, repos, ignored };
+}
+
+export type Problem = { title: string; body: string };
+
+type LiveRepo = { name: string; archived?: boolean };
+
+// Compares the listed repositories with the public repositories that exist on GitHub
+export function reconcile(
+  repos: Repo[],
+  ignored: string[],
+  live: LiveRepo[],
+): { problems: Problem[]; moves: { repo: Repo; archived: boolean }[] } {
+  const problems: Problem[] = [];
+  const moves: { repo: Repo; archived: boolean }[] = [];
+  const liveByName = new Map(live.map((repo) => [repo.name, repo]));
+  const listed = new Set([...repos.map((repo) => repo.name), ...ignored]);
+
+  // Nothing may be public without a governance decision
+  for (const repo of live) {
+    if (!listed.has(repo.name)) {
+      problems.push({
+        title: `${repo.name}: public repository is not listed`,
+        body: `Add \`${repoFile(repo.name, repo.archived === true)}\` or an entry with a reason in \`ignored.yaml\`.`,
+      });
+    }
+  }
+
+  // An entry without a public repository is a typo, a deleted repository or one that went private
+  for (const name of listed) {
+    if (!liveByName.has(name)) {
+      problems.push({
+        title: `${name}: listed repository does not exist or is not public`,
+        body: "Remove the entry, fix its name or make the repository public.",
+      });
+    }
+  }
+
+  // Archiving happens by hand on GitHub and the file follows
+  for (const repo of repos) {
+    const liveRepo = liveByName.get(repo.name);
+    if (liveRepo && (liveRepo.archived === true) !== repo.archived) {
+      moves.push({ repo, archived: !repo.archived });
+    }
+  }
+
+  return { problems, moves };
+}
