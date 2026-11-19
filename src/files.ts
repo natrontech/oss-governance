@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Repo } from "./config.ts";
 import {
   type Action,
@@ -150,12 +151,23 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
             `Do not edit these files here: change the config in ${NAME} instead, manual changes are overwritten by the next sync.`,
           ].join("\n"),
         });
-        await octokit.rest.pulls.requestReviewers({
-          ...target,
-          pull_number: created.number,
-          reviewers: repo.maintainers.filter((maintainer) => !teamSlug(maintainer)),
-          team_reviewers: teamsOf(repo.maintainers),
-        });
+        // GitHub adds the code owners as reviewers right after the pull request opens and rejects requests that collide with that, so a failed request is retried
+        for (let attempt = 1; ; attempt++) {
+          try {
+            await octokit.rest.pulls.requestReviewers({
+              ...target,
+              pull_number: created.number,
+              reviewers: repo.maintainers.filter((maintainer) => !teamSlug(maintainer)),
+              team_reviewers: teamsOf(repo.maintainers),
+            });
+            break;
+          } catch (error) {
+            if (attempt === 3) {
+              throw error;
+            }
+            await sleep(attempt * 5000);
+          }
+        }
       },
     },
   ];
