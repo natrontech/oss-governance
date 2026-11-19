@@ -92,7 +92,7 @@ export async function planSettings(
     }
   }
 
-  // Only the ruleset carrying our name is ours, everything else is reported
+  // Only the ruleset carrying our name is ours, a repository may add its own rulesets on top
   const desired = desiredRuleset(repo.ruleset, ownersTeamId, appId);
   const rulesets = await octokit.paginate(octokit.rest.repos.getRepoRulesets, { ...target, includes_parents: false });
   const existing = rulesets.find((ruleset) => ruleset.name === NAME);
@@ -115,11 +115,8 @@ export async function planSettings(
       });
     }
   }
-  for (const ruleset of rulesets) {
-    if (ruleset.name !== NAME && ruleset.target === "branch") {
-      notes.push(`unmanaged ruleset "${ruleset.name}" (${ruleset.enforcement})`);
-    }
-  }
+
+  // Classic branch protection still applies next to the ruleset, but it is the legacy mechanism and better moved into a ruleset
   if (await orNull(octokit.rest.repos.getBranchProtection({ ...target, branch: live.default_branch! }))) {
     notes.push(`classic branch protection on ${live.default_branch}`);
   }
