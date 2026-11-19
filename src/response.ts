@@ -1,11 +1,11 @@
 import type { Repo } from "./config.ts";
-import { type Action, mentions, NAME, ORG, octokit } from "./github.ts";
+import { type Action, assigneesOf, mentions, NAME, ORG, octokit } from "./github.ts";
 
 export const RESPONSE_LABEL = "response-time";
 
 type Status = "due" | "overdue";
 type Item = { number: number; title: string; url: string; opened: string; status: Status };
-type Tracker = { number: number; title: string; body?: string | null };
+type Tracker = { number: number; title: string; body?: string | null; assignees?: { login: string }[] | null };
 
 // Associations GitHub assigns to people who answer on behalf of the organization
 const INTERNAL = new Set<string | undefined>(["OWNER", "MEMBER", "COLLABORATOR"]);
@@ -102,15 +102,18 @@ export async function planResponse(repo: Repo, warningDays: number, trackers: Tr
     `<!-- state: ${JSON.stringify(state)} -->`,
   ].join("\n");
 
+  // The maintainers are assigned, and following them keeps the assignees current when the maintainers change
+  const assignees = await assigneesOf(repo.maintainers);
   if (!tracker) {
     return [
       {
         description: `open response tracker, requests waiting: ${items.length}`,
-        run: () => octokit.rest.issues.create({ ...target, title, body, labels: [RESPONSE_LABEL] }),
+        run: () => octokit.rest.issues.create({ ...target, title, body, labels: [RESPONSE_LABEL], assignees }),
       },
     ];
   }
-  if (tracker.body === body) {
+  const assigned = (tracker.assignees ?? []).map((assignee) => assignee.login).sort();
+  if (tracker.body === body && assigned.join() === assignees.join()) {
     return [];
   }
 
@@ -121,7 +124,7 @@ export async function planResponse(repo: Repo, warningDays: number, trackers: Tr
     {
       description: `update response tracker #${tracker.number}, requests to notify: ${news.length}`,
       run: async () => {
-        await octokit.rest.issues.update({ ...target, issue_number: tracker.number, body });
+        await octokit.rest.issues.update({ ...target, issue_number: tracker.number, body, assignees });
         if (news.length > 0) {
           await octokit.rest.issues.createComment({
             ...target,

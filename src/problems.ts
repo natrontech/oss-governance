@@ -1,5 +1,5 @@
 import type { Problem, Repo } from "./config.ts";
-import { type Action, NAME, ORG, OWNERS_TEAM, octokit, orNull, teamSlug } from "./github.ts";
+import { type Action, assigneesOf, NAME, ORG, OWNERS_TEAM, octokit, orNull, teamSlug } from "./github.ts";
 
 const LABEL = "governance";
 
@@ -48,12 +48,13 @@ export async function planProblems(problems: Problem[]): Promise<Action[]> {
     if (!open.some((issue) => issue.title === problem.title)) {
       actions.push({
         description: `open issue "${problem.title}"`,
-        run: () =>
+        run: async () =>
           octokit.rest.issues.create({
             ...target,
             title: problem.title,
             body: `${problem.body}\n\n@${ORG}/${OWNERS_TEAM}`,
             labels: [LABEL],
+            assignees: await assigneesOf([`${ORG}/${OWNERS_TEAM}`]),
           }),
       });
     }

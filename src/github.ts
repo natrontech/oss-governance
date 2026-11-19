@@ -63,6 +63,30 @@ export function teamsOf(maintainers: string[]): string[] {
   return [...new Set([OWNERS_TEAM, ...maintainers.flatMap((maintainer) => teamSlug(maintainer) ?? [])])];
 }
 
+// The same teams maintain many repositories, so each team's members are fetched once
+const teamMembers = new Map<string, Promise<string[]>>();
+
+// Issues can only be assigned to users, so a team stands for its members, and GitHub accepts at most ten assignees
+export async function assigneesOf(maintainers: string[]): Promise<string[]> {
+  const logins = await Promise.all(
+    maintainers.map((maintainer) => {
+      const team_slug = teamSlug(maintainer);
+      if (!team_slug) {
+        return [maintainer];
+      }
+      let members = teamMembers.get(team_slug);
+      if (!members) {
+        members = octokit
+          .paginate(octokit.rest.teams.listMembersInOrg, { org: ORG, team_slug })
+          .then((users) => users.map((user) => user.login));
+        teamMembers.set(team_slug, members);
+      }
+      return members;
+    }),
+  );
+  return [...new Set(logins.flat())].sort().slice(0, 10);
+}
+
 export function mentions(maintainers: string[]): string {
   return maintainers.map((maintainer) => `@${maintainer}`).join(" ");
 }
