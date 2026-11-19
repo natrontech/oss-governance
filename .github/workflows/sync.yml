@@ -50,11 +50,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Rollout: only a manual run without dry run applies until the pilot succeeded, then automatic runs apply too
+      # Automatic runs apply, a manual run only applies when its dry run is switched off
       - name: Sync
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-          MODE: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry-run && 'apply' || 'plan' }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'plan' || 'apply' }}
           REPOS: ${{ inputs.repos }}
         # Explicit bash adds pipefail, so a failing sync is not hidden behind tee
         shell: bash
