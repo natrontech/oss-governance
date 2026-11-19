@@ -46,6 +46,10 @@ export const repoSchema = z.strictObject({
   license: licenseSchema.optional(),
   responseDays: responseDaysSchema.optional(),
   ruleset: rulesetSchema.partial().optional().describe("Overrides of the org-wide ruleset in config.yaml"),
+  syncSecurityPolicy: z
+    .boolean()
+    .optional()
+    .describe("Set to false to keep the repository's own SECURITY.md instead of the one from templates/SECURITY.md"),
 });
 
 export const ignoredSchema = z.record(z.string(), z.string().min(1).describe("Why the repository is not managed"));
@@ -61,6 +65,7 @@ export type Repo = {
   license: string;
   responseDays: number | null;
   ruleset: Ruleset;
+  syncSecurityPolicy: boolean;
 };
 
 // Applies the tier and the org-wide ruleset below the values a repository sets itself
@@ -77,6 +82,7 @@ export function resolveRepo(config: Config, name: string, archived: boolean, raw
     license: raw.license ?? tier.license,
     responseDays: raw.responseDays === undefined ? tier.responseDays : raw.responseDays,
     ruleset: { ...config.ruleset, ...raw.ruleset },
+    syncSecurityPolicy: raw.syncSecurityPolicy ?? true,
   };
 }
 

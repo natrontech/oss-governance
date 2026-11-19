@@ -3,3 +3,4 @@ maintainers:
   - janfuhrer
   - nicololuescher
 license: GPL-3.0
+syncSecurityPolicy: false

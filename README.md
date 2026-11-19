@@ -23,6 +23,7 @@ ruleset:
   requiredApprovals: 0
   signedCommits: false
   codeOwnerReview: true
+syncSecurityPolicy: false # keep the repository's own SECURITY.md
 ```
 
 - A new public repository needs a file here, otherwise the sync reports it.
@@ -36,7 +37,7 @@ For every active repository:
 
 - **Files**, by a pull request from the branch `oss-governance/sync` that the maintainers merge:
   - `.github/CODEOWNERS` with the maintainers and the fixed lines for `@natrontech/open-source-owners`
-  - `SECURITY.md` from `templates/SECURITY.md`
+  - `SECURITY.md` from `templates/SECURITY.md`, unless the repository keeps its own with `syncSecurityPolicy: false`
   - `LICENSE`, only when GitHub detects another license than the configured one
 - **Settings**, directly:
   - write access for `open-source-owners` and for teams named as maintainers

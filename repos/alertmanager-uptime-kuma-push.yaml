@@ -1,3 +1,4 @@
 tier: tier-2
 maintainers:
   - svengerber
+syncSecurityPolicy: false

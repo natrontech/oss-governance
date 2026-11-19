@@ -2,3 +2,4 @@ tier: tier-2
 maintainers:
   - janfuhrer
 license: GPL-3.0
+syncSecurityPolicy: false

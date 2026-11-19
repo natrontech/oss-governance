@@ -1,3 +1,4 @@
 tier: tier-1
 maintainers:
   - stonith404
+syncSecurityPolicy: false

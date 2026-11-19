@@ -51,10 +51,12 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
   // GitHub reads CODEOWNERS from .github first, so copies elsewhere would only mislead
   const desired = new Map<string, string | null>([
     [".github/CODEOWNERS", renderCodeowners(repo.maintainers)],
-    ["SECURITY.md", readFileSync("templates/SECURITY.md", "utf8").replaceAll("{{repo}}", repo.name)],
     ["CODEOWNERS", null],
     ["docs/CODEOWNERS", null],
   ]);
+  if (repo.syncSecurityPolicy) {
+    desired.set("SECURITY.md", readFileSync("templates/SECURITY.md", "utf8").replaceAll("{{repo}}", repo.name));
+  }
 
   // The license text is only written when GitHub detects another license than the configured one
   // An existing file of the right license keeps its copyright line that way
@@ -89,8 +91,16 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
     ];
   }
 
-  // An open pull request with the right content only needs a nudge once it has waited too long
-  if (pull && differing(await readFiles(repo.name, BRANCH, paths)).length === 0) {
+  // An open pull request that changes exactly the differing files to their desired content only needs a nudge once it has waited too long
+  // A file that is no longer managed, such as a SECURITY.md the repository keeps, must drop out of the pull request
+  const upToDate = async (number: number) => {
+    const files = await octokit.paginate(octokit.rest.pulls.listFiles, { ...target, pull_number: number });
+    const touched = files.map((file) => file.filename).sort();
+    return (
+      touched.join() === [...changed].sort().join() && differing(await readFiles(repo.name, BRANCH, paths)).length === 0
+    );
+  };
+  if (pull && (await upToDate(pull.number))) {
     const age = Math.floor((Date.now() - Date.parse(pull.created_at)) / 86_400_000);
     const due = Math.min(2, Math.floor(age / reminderDays));
     const comments = await octokit.paginate(octokit.rest.issues.listComments, { ...target, issue_number: pull.number });
