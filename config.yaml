@@ -9,7 +9,7 @@ ruleset:
 syncPrReminderDays: 7
 
 # Working days before the response deadline at which maintainers are notified
-responseWarningDays: 2
+responseWarningDays: 1
 
 # responseDays are working days until a qualified first response, null means best effort
 tiers:
