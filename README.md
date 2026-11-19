@@ -58,6 +58,12 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 ```
 
 `plan` only reads.
+`node src/cli.ts apply` makes the changes and is meant to be run by the `Sync` workflow only.
+Both take optional repository names to limit the run to those repositories, which skips the org-wide archive moves and governance issues.
+
+The `Sync` workflow runs after every merge to `main` and every night.
+It can also be started by hand under Actions, where `dry-run` only prints what would change and `repos` limits the run to some repositories.
+
 `pnpm install` also sets up the git hooks in `.githooks`:
 
 - `pre-commit` validates every YAML file against the schema in `src/config.ts`, regenerates `INVENTORY.md` and `schemas/` with `pnpm generate` and checks the staged files with Biome
