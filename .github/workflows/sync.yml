@@ -7,7 +7,8 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency: sync
 
@@ -25,11 +26,8 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: natrontech
 
-      # Checking out with the app token lets the later push bypass the ruleset as the app
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          token: ${{ steps.app.outputs.token }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -50,14 +48,6 @@ jobs:
         # Explicit bash adds pipefail, so a failing sync is not hidden behind tee
         shell: bash
         run: node src/cli.ts plan | tee -a "$GITHUB_STEP_SUMMARY"
-
-      # The pre-commit hook installed by pnpm adds the regenerated inventory to this commit
-      - name: Commit moved repository files
-        run: |
-          git config user.name "natron-oss-governance[bot]"
-          git config user.email "natron-oss-governance[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet || (git commit -m "chore: move archived repository files" && git push)
 
       # GitHub only mails the last editor of this file about a failed scheduled run
       # The next successful sync closes the issue again because no problem carries its title

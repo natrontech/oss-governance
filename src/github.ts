@@ -27,6 +27,28 @@ export async function orNull<T>(request: Promise<T>): Promise<T | null> {
   }
 }
 
+// A file to write, or an existing blob to place at a path, where a null sha deletes the path
+export type Change = { path: string; content: string } | { path: string; sha: string | null };
+
+// Creates a commit on top of a branch through the API, which makes GitHub sign it and attribute it to the app
+// The branch itself is not moved, so callers decide how its ref is updated
+export async function createCommit(repo: string, branch: string, changes: Change[], message: string): Promise<string> {
+  const target = { owner: ORG, repo };
+  const { data: head } = await octokit.rest.repos.getBranch({ ...target, branch });
+  const { data: tree } = await octokit.rest.git.createTree({
+    ...target,
+    base_tree: head.commit.commit.tree.sha,
+    tree: changes.map((change) => ({ mode: "100644" as const, type: "blob" as const, ...change })),
+  });
+  const { data: commit } = await octokit.rest.git.createCommit({
+    ...target,
+    message,
+    tree: tree.sha,
+    parents: [head.commit.sha],
+  });
+  return commit.sha;
+}
+
 // Maintainers are user logins or teams written as org/slug
 export function teamSlug(maintainer: string): string | undefined {
   return maintainer.split("/")[1];

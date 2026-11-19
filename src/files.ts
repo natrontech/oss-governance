@@ -3,6 +3,7 @@ import type { Repo } from "./config.ts";
 import {
   type Action,
   APP_SLUG,
+  createCommit,
   type LiveRepo,
   mentions,
   NAME,
@@ -116,30 +117,21 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
     {
       description: `${pull ? "update" : "open"} sync pull request for ${changed.join(", ")}`,
       run: async () => {
-        // Build the commit on top of the current default branch through the API, which makes GitHub sign it
-        const { data: base } = await octokit.rest.repos.getBranch({ ...target, branch: live.default_branch! });
-        const { data: tree } = await octokit.rest.git.createTree({
-          ...target,
-          base_tree: base.commit.commit.tree.sha,
-          tree: changed.map((path) => {
+        const sha = await createCommit(
+          repo.name,
+          live.default_branch!,
+          changed.map((path) => {
             const content = desired.get(path);
-            return content == null
-              ? { path, mode: "100644" as const, type: "blob" as const, sha: null }
-              : { path, mode: "100644" as const, type: "blob" as const, content };
+            return content == null ? { path, sha: null } : { path, content };
           }),
-        });
-        const { data: commit } = await octokit.rest.git.createCommit({
-          ...target,
-          message: TITLE,
-          tree: tree.sha,
-          parents: [base.commit.sha],
-        });
+          TITLE,
+        );
 
         // Move the branch in one step, resetting it to the base first would make GitHub close the pull request
         if (await orNull(octokit.rest.git.getRef({ ...target, ref: `heads/${BRANCH}` }))) {
-          await octokit.rest.git.updateRef({ ...target, ref: `heads/${BRANCH}`, sha: commit.sha, force: true });
+          await octokit.rest.git.updateRef({ ...target, ref: `heads/${BRANCH}`, sha, force: true });
         } else {
-          await octokit.rest.git.createRef({ ...target, ref: `refs/heads/${BRANCH}`, sha: commit.sha });
+          await octokit.rest.git.createRef({ ...target, ref: `refs/heads/${BRANCH}`, sha });
         }
         if (pull) {
           return;

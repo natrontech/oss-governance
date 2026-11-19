@@ -1,7 +1,7 @@
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { loadConfig, reconcile, repoFile } from "./config.ts";
 import { planFiles } from "./files.ts";
-import { type Action, APP_SLUG, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
+import { type Action, APP_SLUG, type Change, createCommit, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
 import { renderInventory } from "./inventory.ts";
 import { maintainerProblems, planProblems } from "./problems.ts";
 import { planResponse, RESPONSE_LABEL } from "./response.ts";
@@ -61,17 +61,36 @@ console.log(`## Governance ${apply ? "sync" : "plan"}`);
 const live = await octokit.paginate(octokit.rest.repos.listForOrg, { org: ORG, type: "public" });
 const { problems, moves } = reconcile(repos, Object.keys(ignored), live);
 
-// Follow manual archiving on GitHub by moving the repository's file
-await section("Archive", async () => ({
-  actions: moves.map(({ repo, archived }) => ({
-    description: `move ${repoFile(repo.name, repo.archived)} to ${repoFile(repo.name, archived)}`,
-    run: async () => {
-      mkdirSync("repos/archived", { recursive: true });
-      renameSync(repoFile(repo.name, repo.archived), repoFile(repo.name, archived));
-      repo.archived = archived;
-    },
-  })),
-}));
+// Follow manual archiving on GitHub by moving the repository's file in one commit together with the inventory
+await section("Archive", async () => {
+  if (moves.length === 0) {
+    return { actions: [] };
+  }
+  const paths = moves.map(({ repo, archived }) => [repoFile(repo.name, repo.archived), repoFile(repo.name, archived)]);
+  return {
+    actions: [
+      {
+        description: `commit to main: ${paths.map(([from, to]) => `move ${from} to ${to}`).join(", ")}`,
+        run: async () => {
+          // A moved file keeps its content, so its blob is placed at the new path
+          const changes: Change[] = [];
+          for (const [from, to] of paths) {
+            const { data } = await octokit.rest.repos.getContent({ owner: ORG, repo: NAME, path: from, ref: "main" });
+            changes.push({ path: to, sha: (data as { sha: string }).sha }, { path: from, sha: null });
+          }
+          for (const { repo, archived } of moves) {
+            repo.archived = archived;
+          }
+          changes.push({ path: "INVENTORY.md", content: renderInventory(repos, ignored) });
+
+          // Without force the update fails if main moved meanwhile, and the next run tries again
+          const sha = await createCommit(NAME, "main", changes, "chore: move archived repository files");
+          await octokit.rest.git.updateRef({ owner: ORG, repo: NAME, ref: "heads/main", sha });
+        },
+      },
+    ],
+  };
+});
 
 // Ids the ruleset refers to and the tracking issues the response check updates
 const { data: owners } = await octokit.rest.teams.getByName({ org: ORG, team_slug: OWNERS_TEAM });
