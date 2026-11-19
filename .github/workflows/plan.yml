@@ -9,8 +9,6 @@ permissions:
 
 jobs:
   plan:
-    # Pull requests from forks get no secrets, so the plan cannot run for them
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -36,9 +34,15 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # The pre-commit hook keeps the inventory current, but it does not run for web edits or skipped hooks
+      - name: Check the inventory is current
+        run: pnpm inventory && git diff --exit-code INVENTORY.md
+
+      # Pull requests from forks get no secrets, so the plan only runs for branches of this repository
       # The plan only reads, so the code of the pull request never holds a token that can change anything
       - name: Create read-only app token
         id: app
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ vars.APP_CLIENT_ID }}
@@ -51,12 +55,15 @@ jobs:
           permission-pull-requests: read
 
       - name: Plan
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        # Explicit bash adds pipefail, so a failing plan is not hidden behind tee
+        shell: bash
         run: node src/cli.ts plan | tee plan.md
 
       - name: Comment the plan
-        if: always() && hashFiles('plan.md') != ''
+        if: always() && hashFiles('plan.md') != '' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file plan.md --edit-last --create-if-none

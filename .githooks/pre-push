@@ -1,0 +1,5 @@
+#!/bin/sh
+# Keep changes that break the sync from reaching a pull request
+set -e
+pnpm -s typecheck
+pnpm -s test

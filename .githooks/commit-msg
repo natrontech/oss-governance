@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enforce Conventional Commits, letting through the messages git writes itself for merges, reverts and fixups
+pattern='^((build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9-]+\))?!?: .+|Merge .+|Revert ".+|(fixup|squash|amend)! .+)'
+if ! head -n 1 "$1" | grep -qE "$pattern"; then
+  echo "commit-msg: use a Conventional Commit subject such as 'fix: describe the change'" >&2
+  exit 1
+fi

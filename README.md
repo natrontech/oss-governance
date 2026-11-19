@@ -58,6 +58,7 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 ```
 
 `plan` only reads.
+`pnpm install` also sets up a pre-commit hook that regenerates `INVENTORY.md` with `pnpm inventory`, so it is part of every commit that changes a repository file.
 `node src/cli.ts apply` makes the changes and is meant to be run by the `Sync` workflow only.
 
 ## Setup

@@ -8,11 +8,18 @@ import { RESPONSE_LABEL, planResponse } from "./response.ts";
 import { planSettings } from "./settings.ts";
 
 const mode = process.argv[2];
-if (mode !== "plan" && mode !== "apply") {
-  console.error("usage: node src/cli.ts plan|apply");
+if (mode !== "plan" && mode !== "apply" && mode !== "inventory") {
+  console.error("usage: node src/cli.ts plan|apply|inventory");
   process.exit(2);
 }
 const apply = mode === "apply";
+const { config, repos, ignored } = loadConfig();
+
+// The inventory only depends on the config files, so it is regenerated without asking GitHub
+if (mode === "inventory") {
+  writeFileSync("INVENTORY.md", renderInventory(repos, ignored));
+  process.exit(0);
+}
 
 // Prints one section of the report and, when applying, carries out its actions in order
 async function section(title: string, plan: () => Promise<{ actions: Action[]; notes?: string[] }>): Promise<void> {
@@ -37,7 +44,6 @@ async function section(title: string, plan: () => Promise<{ actions: Action[]; n
 console.log(`## Governance ${apply ? "sync" : "plan"}`);
 
 // Compare the listed repositories with the public repositories of the organization
-const { config, repos, ignored } = loadConfig();
 const live = await octokit.paginate(octokit.rest.repos.listForOrg, { org: ORG, type: "public" });
 const { problems, moves } = reconcile(repos, Object.keys(ignored), live);
 
@@ -101,7 +107,6 @@ if (problems.length > 0) {
 }
 if (apply) {
   await section("Issues", async () => ({ actions: await planProblems(problems) }));
-  writeFileSync("INVENTORY.md", renderInventory(repos, ignored));
 } else if (problems.length > 0) {
   process.exit(1);
 }

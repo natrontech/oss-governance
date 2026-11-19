@@ -1,0 +1,5 @@
+#!/bin/sh
+# Keep the generated inventory in step with the repository files of the same commit
+set -e
+node src/cli.ts inventory
+git add INVENTORY.md
