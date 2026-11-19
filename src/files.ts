@@ -66,6 +66,11 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
       "LICENSE",
       license.body.replace("[year]", String(new Date().getFullYear())).replace("[fullname]", "Natron Tech AG"),
     );
+
+    // Other license files would leave the repository with two licenses, and files that do not exist stay untouched
+    for (const path of ["LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "COPYING", "COPYING.md"]) {
+      desired.set(path, null);
+    }
   }
 
   const paths = [...desired.keys()];
