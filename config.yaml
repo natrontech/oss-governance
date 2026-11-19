@@ -11,6 +11,9 @@ syncPrReminderDays: 7
 # Working days before the response deadline at which maintainers are notified
 responseWarningDays: 1
 
+# Days between reminders to the maintainers while requests stay past their response deadline
+overdueReminderDays: 7
+
 # responseDays are working days until a qualified first response, null means best effort
 tiers:
   tier-1:

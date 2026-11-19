@@ -130,7 +130,7 @@ for (const repo of repos) {
         actions: [
           ...settings.actions,
           ...(await planFiles(repo, liveRepo, config.syncPrReminderDays)),
-          ...(await planResponse(repo, config.responseWarningDays, trackers)),
+          ...(await planResponse(repo, config, trackers)),
         ],
         notes: settings.notes,
       };

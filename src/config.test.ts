@@ -5,6 +5,7 @@ const config: Config = {
   ruleset: { requiredApprovals: 1, signedCommits: true, codeOwnerReview: false },
   syncPrReminderDays: 7,
   responseWarningDays: 2,
+  overdueReminderDays: 7,
   tiers: {
     "tier-1": { license: "Apache-2.0", responseDays: 5 },
     "tier-3": { license: "CC-BY-SA-4.0", responseDays: null },
