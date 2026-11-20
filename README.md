@@ -47,9 +47,9 @@ For every active repository:
   - an issue here for every governance problem, such as a maintainer who left the organization or an unlisted public repository
   - an issue here per repository listing external issues and pull requests that are close to or past the tier's response time without an answer from a member
 
-Other rulesets are not touched, so a repository can add its own on top of the managed one.
-Classic branch protection is not touched either, but it is reported, because it is better moved into a ruleset and it blocks the commits of the app.
-The same goes for an own ruleset that the app cannot bypass.
+A repository can add its own rulesets on top of the managed one.
+Their rules stay as they are, but the app adds itself as a bypass actor to those that would reject its commits, such as one that requires a pull request.
+Classic branch protection is not touched, but it is reported, because it is better moved into a ruleset and it blocks the commits of the app.
 A repository that needs required status checks adds its own ruleset, GitHub combines it with the managed one.
 
 ## Running it locally

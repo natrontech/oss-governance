@@ -7,16 +7,26 @@ const OWNER_FILE_PATTERNS = [".github/CODEOWNERS", "SECURITY.md", "LICENSE"];
 // Built-in id of the repository admin role
 const ADMIN_ROLE = 5;
 
+// Rules that a signed fast-forward commit of the app always satisfies, every other rule could reject it
+const HARMLESS_RULES = new Set([
+  "creation",
+  "deletion",
+  "non_fast_forward",
+  "required_linear_history",
+  "required_signatures",
+]);
+
+function appBypass(appId: number) {
+  return { actor_id: appId, actor_type: "Integration", bypass_mode: "always" } as const;
+}
+
 export function desiredRuleset(ruleset: Ruleset, ownersTeamId: number, appId: number) {
   return {
     name: NAME,
     target: "branch",
     enforcement: "active",
     conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
-    bypass_actors: [
-      { actor_id: ADMIN_ROLE, actor_type: "RepositoryRole", bypass_mode: "always" },
-      { actor_id: appId, actor_type: "Integration", bypass_mode: "always" },
-    ],
+    bypass_actors: [{ actor_id: ADMIN_ROLE, actor_type: "RepositoryRole", bypass_mode: "always" }, appBypass(appId)],
     rules: [
       {
         type: "pull_request",
@@ -92,7 +102,7 @@ export async function planSettings(
     }
   }
 
-  // Only the ruleset carrying our name is ours, a repository may add its own rulesets on top
+  // Only the ruleset carrying our name is managed, a repository may add its own rulesets on top
   const desired = desiredRuleset(repo.ruleset, ownersTeamId, appId);
   const rulesets = await octokit.paginate(octokit.rest.repos.getRepoRulesets, { ...target, includes_parents: false });
   const existing = rulesets.find((ruleset) => ruleset.name === NAME);
@@ -111,6 +121,33 @@ export async function planSettings(
             ...target,
             ruleset_id: existing.id,
             ...desired,
+          } as never),
+      });
+    }
+  }
+
+  // A ruleset the repository adds itself would reject the commits of the app unless the app may bypass it
+  // Rulesets whose rules such a commit always satisfies are left untouched
+  const branchRules = await octokit.paginate(octokit.rest.repos.getBranchRules, {
+    ...target,
+    branch: live.default_branch!,
+  });
+  const blocking = new Set(
+    branchRules
+      .filter((rule) => rule.ruleset_id !== existing?.id && !HARMLESS_RULES.has(rule.type))
+      .map((rule) => rule.ruleset_id!),
+  );
+  for (const ruleset_id of blocking) {
+    const { data: ruleset } = await octokit.rest.repos.getRepoRuleset({ ...target, ruleset_id });
+    const bypassActors = ruleset.bypass_actors ?? [];
+    if (!bypassActors.some((actor) => actor.actor_type === "Integration" && actor.actor_id === appId)) {
+      actions.push({
+        description: `let the app bypass ruleset ${ruleset.name}`,
+        run: () =>
+          octokit.request("PUT /repos/{owner}/{repo}/rulesets/{ruleset_id}", {
+            ...target,
+            ruleset_id,
+            bypass_actors: [...bypassActors, appBypass(appId)],
           } as never),
       });
     }
