@@ -64,12 +64,12 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 `node src/cli.ts track` updates the issues here, and `node src/cli.ts apply` changes the repositories; both are meant to be run by the `Sync` workflow only.
 All of them take optional repository names to limit the run to those repositories, which skips the org-wide archive moves and governance issues.
 
-The `Sync` workflow runs after every merge to `main` and every night in two jobs:
+The `Sync` workflow runs after every merge to `main` and every day at 07:00 and 15:00 Zurich time, in two jobs:
 
 1. `track` updates the issues and the archive folder right away and lists the changes to repositories, with a diff of every file, in its summary.
 2. `apply` makes those changes, but only once a member of `open-source-owners` approves it in the run under **Review deployments**; GitHub notifies them when a run waits.
 
-A night without changes needs no approval, and a newer run replaces one that still waits.
+A run without changes needs no approval, and a newer run replaces one that still waits.
 A failed run opens the issue "Sync run failed", which the next successful run closes.
 
 The workflow can also be started by hand under Actions, where `dry-run` only prints what would change and `repos` limits the run to some repositories.

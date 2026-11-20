@@ -94,7 +94,7 @@ export async function planProblems(problems: Problem[], config: Config): Promise
     }
 
     // An unlisted repository stays public without a governance decision, so its assignees and the owners are reminded until it is listed
-    // Days are counted by calendar date, so a nightly run that starts a few minutes earlier than the one that opened the issue still counts a full day
+    // Days are counted by calendar date, so a scheduled run that starts a few minutes earlier than the one that opened the issue still counts a full day
     if (!problem.unlisted) {
       continue;
     }
