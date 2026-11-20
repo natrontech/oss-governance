@@ -168,7 +168,7 @@ if (problems.length > 0) {
   console.log(`\n### Problems\n\n${problems.map((problem) => `- ${problem.title}`).join("\n")}`);
 }
 if (mode === "track" && !partial) {
-  await section("Issues", async () => ({ tracking: await planProblems(problems) }));
+  await section("Issues", async () => ({ tracking: await planProblems(problems, config) }));
 }
 if (mode === "track" && process.env.GITHUB_OUTPUT) {
   appendFileSync(process.env.GITHUB_OUTPUT, `changes=${pending}\n`);

@@ -11,6 +11,10 @@ responseWarningDays: 1
 # Days between reminders to the maintainers while requests stay past their response deadline
 overdueReminderDays: 7
 
+# Days after which the issue of an unlisted public repository reminds its publisher and the owners, and the days between further reminders
+unlistedFirstReminderDays: 1
+unlistedReminderDays: 3
+
 # responseDays are working days until a qualified first response, null means best effort
 tiers:
   tier-1:

@@ -25,6 +25,16 @@ export const configSchema = z.strictObject({
     .int()
     .positive()
     .describe("Days between reminders to the maintainers while requests stay past their response deadline"),
+  unlistedFirstReminderDays: z
+    .number()
+    .int()
+    .positive()
+    .describe("Days after which the issue of an unlisted public repository gets its first reminder"),
+  unlistedReminderDays: z
+    .number()
+    .int()
+    .positive()
+    .describe("Days between further reminders while a public repository stays unlisted"),
   responseWarningDays: z
     .number()
     .int()
@@ -130,7 +140,8 @@ export function loadConfig(): { config: Config; repos: Repo[]; ignored: Record<s
   return { config, repos, ignored };
 }
 
-export type Problem = { title: string; body: string };
+// unlisted names the public repository of a problem about a repository without a file or an ignore entry
+export type Problem = { title: string; body: string; unlisted?: string };
 
 type LiveRepo = { name: string; archived?: boolean };
 
@@ -151,6 +162,7 @@ export function reconcile(
       problems.push({
         title: `${repo.name}: public repository is not listed`,
         body: `Add \`${repoFile(repo.name, repo.archived === true)}\` or an entry with a reason in \`ignored.yaml\`.`,
+        unlisted: repo.name,
       });
     }
   }

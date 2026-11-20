@@ -45,6 +45,7 @@ For every active repository:
   - private vulnerability reporting, secret scanning and push protection
 - **Notifications**, as GitHub issues, assignments and mentions:
   - an issue here for every governance problem, such as a maintainer who left the organization or an unlisted public repository
+  - an unlisted public repository's issue is assigned to whoever made it public, and after a day and then every three days it mentions them and the owners again
   - an issue here per repository listing external issues and pull requests that are close to or past the tier's response time without an answer from a member
 
 A repository can add its own rulesets on top of the managed one.
