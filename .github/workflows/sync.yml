@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       dry-run:
-        description: Only print what would change, without changing anything
+        description: Only print what would change, without updating issues or asking for approval
         type: boolean
         default: true
       repos:
@@ -19,12 +19,14 @@ on:
 permissions:
   contents: read
 
-concurrency: sync
-
 jobs:
-  sync:
+  # Updates the issues here and lists the changes to repositories, which wait for the approval of the apply job
+  track:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency: track
+    outputs:
+      changes: ${{ steps.track.outputs.changes }}
 
     steps:
       - name: Create app token
@@ -50,36 +52,75 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Automatic runs apply, a manual run only applies when its dry run is switched off
-      - name: Sync
+      # A manual dry run only plans, so it neither updates issues nor sets the output that starts the apply job
+      - name: Track
+        id: track
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'plan' || 'apply' }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'plan' || 'track' }}
           REPOS: ${{ inputs.repos }}
-        # Explicit bash adds pipefail, so a failing sync is not hidden behind tee
+        # Explicit bash adds pipefail, so a failing run is not hidden behind tee
         shell: bash
         # REPOS is left unquoted on purpose so that each repository becomes its own argument
         run: node src/cli.ts "$MODE" $REPOS | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # GitHub only mails the last editor of this file about a failed scheduled run
-      # The next successful sync closes the issue again because no problem carries its title
-      - name: Report a failed run
-        if: failure()
+      # Without changes there is no apply job, so this run is the one that tells whether syncing works again
+      - name: Report the run
+        if: failure() || (success() && steps.track.outputs.changes == 'false')
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        shell: bash
-        run: |
-          number=$(gh issue list --label governance --search 'in:title "Sync run failed"' --json number --jq '.[0].number')
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "Failed again: $RUN_URL"
-            exit 0
-          fi
+        run: .github/report-run.sh "${{ job.status }}"
 
-          # Issues can only be assigned to users, so the owners team is assigned through its members
-          assignees=()
-          for login in $(gh api orgs/natrontech/teams/open-source-owners/members --jq '.[].login'); do
-            assignees+=(-f "assignees[]=$login")
-          done
-          gh api "repos/$GITHUB_REPOSITORY/issues" -f title="Sync run failed" -f "labels[]=governance" "${assignees[@]}" \
-            -f body="The sync run failed: $RUN_URL"
+  # The environment makes the job wait until an owner approves the changes listed in the summary of the track job
+  apply:
+    needs: track
+    if: ${{ !cancelled() && needs.track.outputs.changes == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: sync
+    # A newer run lists the current changes, so it replaces a run that still waits for approval
+    concurrency:
+      group: apply
+      cancel-in-progress: true
+
+    steps:
+      - name: Create app token
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: natrontech
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          REPOS: ${{ inputs.repos }}
+        shell: bash
+        run: node src/cli.ts apply $REPOS | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A failed track job is still reported, so a successful apply does not close its issue
+      - name: Report the run
+        if: failure() || (success() && needs.track.result == 'success')
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: .github/report-run.sh "${{ job.status }}"

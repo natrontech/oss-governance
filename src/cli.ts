@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { loadConfig, reconcile, repoFile } from "./config.ts";
 import { planFiles } from "./files.ts";
 import { type Action, APP_SLUG, type Change, createCommit, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
@@ -8,12 +8,12 @@ import { planResponse, RESPONSE_LABEL } from "./response.ts";
 import { renderSchemas } from "./schema.ts";
 import { planSettings } from "./settings.ts";
 
+// plan only reads, track updates the issues here and lists the repository changes that wait for approval, and apply makes those changes
 const mode = process.argv[2];
-if (mode !== "plan" && mode !== "apply" && mode !== "generate") {
-  console.error("usage: node src/cli.ts plan|apply|generate [repository...]");
+if (mode !== "plan" && mode !== "track" && mode !== "apply" && mode !== "generate") {
+  console.error("usage: node src/cli.ts plan|track|apply|generate [repository...]");
   process.exit(2);
 }
-const apply = mode === "apply";
 
 // A run limited to some repositories leaves the org-wide archive moves and governance issues alone
 const only = process.argv.slice(3);
@@ -44,13 +44,30 @@ if (mode === "generate") {
   process.exit(0);
 }
 
-// Prints one section of the report and, when applying, carries out its actions in order
-async function section(title: string, plan: () => Promise<{ actions: Action[]; notes?: string[] }>): Promise<void> {
+// Repository changes found by track, which the workflow passes on to the approval of the apply job
+let pending = false;
+
+// Prints one section of the report and carries out the actions the mode is responsible for
+// Changes to repositories run in apply, after an approval, while tracking actions only touch this repository and run in track
+async function section(
+  title: string,
+  plan: () => Promise<{ changes?: Action[]; tracking?: Action[]; notes?: string[] }>,
+): Promise<void> {
   const lines: string[] = [];
   try {
-    const { actions, notes = [] } = await plan();
-    for (const action of actions) {
-      if (apply) {
+    const { changes = [], tracking = [], notes = [] } = await plan();
+    for (const action of changes) {
+      if (mode === "apply") {
+        await action.run();
+      }
+      pending ||= mode === "track";
+      lines.push(`- ${action.description}${mode === "track" ? " (waits for approval)" : ""}`);
+      if (action.details) {
+        lines.push("", "<details><summary>Diff</summary>", "", "```diff", action.details, "```", "", "</details>", "");
+      }
+    }
+    for (const action of tracking) {
+      if (mode === "track") {
         await action.run();
       }
       lines.push(`- ${action.description}`);
@@ -64,20 +81,22 @@ async function section(title: string, plan: () => Promise<{ actions: Action[]; n
   }
 }
 
-console.log(`## Governance ${apply ? "sync" : "plan"}`);
+console.log(`## Governance ${mode}`);
 
 // Compare the listed repositories with the public repositories of the organization
+// The org-wide archive moves and governance issues belong to track, apply only changes repositories
 const live = await octokit.paginate(octokit.rest.repos.listForOrg, { org: ORG, type: "public" });
-const { problems, moves } = partial ? { problems: [], moves: [] } : reconcile(repos, Object.keys(ignored), live);
+const { problems, moves } =
+  partial || mode === "apply" ? { problems: [], moves: [] } : reconcile(repos, Object.keys(ignored), live);
 
 // Follow manual archiving on GitHub by moving the repository's file in one commit together with the inventory
 await section("Archive", async () => {
   if (moves.length === 0) {
-    return { actions: [] };
+    return {};
   }
   const paths = moves.map(({ repo, archived }) => [repoFile(repo.name, repo.archived), repoFile(repo.name, archived)]);
   return {
-    actions: [
+    tracking: [
       {
         description: `commit to main: ${paths.map(([from, to]) => `move ${from} to ${to}`).join(", ")}`,
         run: async () => {
@@ -104,12 +123,18 @@ await section("Archive", async () => {
 // Ids the ruleset refers to and the tracking issues the response check updates
 const { data: owners } = await octokit.rest.teams.getByName({ org: ORG, team_slug: OWNERS_TEAM });
 const { data: app } = await octokit.rest.apps.getBySlug({ app_slug: APP_SLUG });
-const trackers = await octokit.paginate(octokit.rest.issues.listForRepo, {
-  owner: ORG,
-  repo: NAME,
-  labels: RESPONSE_LABEL,
-  state: "open",
-});
+const trackers =
+  mode === "apply"
+    ? []
+    : await octokit.paginate(octokit.rest.issues.listForRepo, {
+        owner: ORG,
+        repo: NAME,
+        labels: RESPONSE_LABEL,
+        state: "open",
+      });
+
+// A failed repository does not stop the others, but it fails the run so the workflow reports it
+let failed = false;
 
 // Sync every active repository on its own
 for (const repo of repos) {
@@ -123,32 +148,31 @@ for (const repo of repos) {
       const invalid = await maintainerProblems(repo);
       if (invalid.length > 0) {
         problems.push(...invalid);
-        return { actions: [], notes: ["skipped until its maintainers are fixed"] };
+        return { notes: ["skipped until its maintainers are fixed"] };
       }
       const settings = await planSettings(repo, liveRepo, owners.id, app!.id);
       return {
-        actions: [
-          ...settings.actions,
-          ...(await planFiles(repo, liveRepo, config.syncPrReminderDays)),
-          ...(await planResponse(repo, config, trackers)),
-        ],
+        changes: [...settings.actions, ...(await planFiles(repo, liveRepo))],
+        tracking: mode === "apply" ? [] : await planResponse(repo, config, trackers),
         notes: settings.notes,
       };
     });
   } catch (error) {
-    // One broken repository must not keep the others from being synced, so it becomes a problem of its own
-    const message = error instanceof Error ? error.message : String(error);
-    problems.push({ title: `${repo.name}: sync failed`, body: message });
-    console.log(`\n### ${repo.name} failed\n\n${message}`);
+    failed = true;
+    console.log(`\n### ${repo.name} failed\n\n${error instanceof Error ? error.message : error}`);
   }
 }
 
-// Problems fail a plan so they are fixed before merging, a sync turns them into issues
+// Problems fail a plan so they are fixed before merging, track turns them into issues
 if (problems.length > 0) {
   console.log(`\n### Problems\n\n${problems.map((problem) => `- ${problem.title}`).join("\n")}`);
 }
-if (apply && !partial) {
-  await section("Issues", async () => ({ actions: await planProblems(problems) }));
-} else if (!apply && problems.length > 0) {
+if (mode === "track" && !partial) {
+  await section("Issues", async () => ({ tracking: await planProblems(problems) }));
+}
+if (mode === "track" && process.env.GITHUB_OUTPUT) {
+  appendFileSync(process.env.GITHUB_OUTPUT, `changes=${pending}\n`);
+}
+if (failed || (mode === "plan" && problems.length > 0)) {
   process.exit(1);
 }

@@ -5,7 +5,7 @@ export const ORG = "natrontech";
 export const OWNERS_TEAM = "open-source-owners";
 export const APP_SLUG = "natron-oss-governance";
 
-// Name of this repository, of the ruleset it manages and prefix of the sync branch
+// Name of this repository and of the ruleset it manages
 export const NAME = "oss-governance";
 
 // Octokit logs every failed request, including the expected 404s, while real failures are thrown and reported by the sync
@@ -16,8 +16,8 @@ export const octokit = new Octokit({
 
 export type LiveRepo = Awaited<ReturnType<typeof octokit.rest.repos.listForOrg>>["data"][number];
 
-// A single difference between the config and GitHub, with the call that removes it
-export type Action = { description: string; run: () => Promise<unknown> };
+// A single difference between the config and GitHub, with the call that removes it and optional Markdown shown below it
+export type Action = { description: string; details?: string; run: () => Promise<unknown> };
 
 // GitHub answers 404 for many lookups where absence is an expected state
 export async function orNull<T>(request: Promise<T>): Promise<T | null> {
@@ -58,7 +58,7 @@ export function teamSlug(maintainer: string): string | undefined {
   return maintainer.split("/")[1];
 }
 
-// Teams that need write access to a repository and a review request on its sync pull requests
+// Teams that need write access to a repository
 export function teamsOf(maintainers: string[]): string[] {
   return [...new Set([OWNERS_TEAM, ...maintainers.flatMap((maintainer) => teamSlug(maintainer) ?? [])])];
 }

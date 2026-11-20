@@ -8,7 +8,7 @@ The current state of all repositories is in [INVENTORY.md](INVENTORY.md).
 ## Changing a repository
 
 Edit `repos/<name>.yaml` and open a pull request.
-The `Plan` check comments what the change will do on GitHub, and the sync runs once the pull request is merged.
+The `Plan` check comments what the change will do on GitHub, including a diff of every file it commits, and the sync runs once the pull request is merged.
 
 ```yaml
 tier: tier-2
@@ -35,21 +35,21 @@ syncSecurityPolicy: false # keep the repository's own SECURITY.md
 
 For every active repository:
 
-- **Files**, by a pull request from the branch `oss-governance/sync` that the maintainers merge:
+- **Files**, committed by the app directly to the default branch, which it may do as a bypass actor of the ruleset:
   - `.github/CODEOWNERS` with the maintainers and the fixed lines for `@natrontech/open-source-owners`
   - `SECURITY.md` from `templates/SECURITY.md`, unless the repository keeps its own with `syncSecurityPolicy: false`
   - `LICENSE`, only when GitHub detects another license than the configured one
-- **Settings**, directly:
+- **Settings**:
   - write access for `open-source-owners` and for teams named as maintainers
   - the ruleset `oss-governance` on the default branch
   - private vulnerability reporting, secret scanning and push protection
-- **Notifications**, as GitHub review requests and mentions:
-  - a review request to the maintainers and the owners on every sync pull request, and reminders when it stays open
+- **Notifications**, as GitHub issues, assignments and mentions:
   - an issue here for every governance problem, such as a maintainer who left the organization or an unlisted public repository
   - an issue here per repository listing external issues and pull requests that are close to or past the tier's response time without an answer from a member
 
 Other rulesets are not touched, so a repository can add its own on top of the managed one.
-Classic branch protection is not touched either, but it is reported, because it is better moved into a ruleset.
+Classic branch protection is not touched either, but it is reported, because it is better moved into a ruleset and it blocks the commits of the app.
+The same goes for an own ruleset that the app cannot bypass.
 A repository that needs required status checks adds its own ruleset, GitHub combines it with the managed one.
 
 ## Running it locally
@@ -60,11 +60,18 @@ GITHUB_TOKEN=$(gh auth token) pnpm plan
 ```
 
 `plan` only reads.
-`node src/cli.ts apply` makes the changes and is meant to be run by the `Sync` workflow only.
-Both take optional repository names to limit the run to those repositories, which skips the org-wide archive moves and governance issues.
+`node src/cli.ts track` updates the issues here, and `node src/cli.ts apply` changes the repositories; both are meant to be run by the `Sync` workflow only.
+All of them take optional repository names to limit the run to those repositories, which skips the org-wide archive moves and governance issues.
 
-The `Sync` workflow runs after every merge to `main` and every night.
-It can also be started by hand under Actions, where `dry-run` only prints what would change and `repos` limits the run to some repositories.
+The `Sync` workflow runs after every merge to `main` and every night in two jobs:
+
+1. `track` updates the issues and the archive folder right away and lists the changes to repositories, with a diff of every file, in its summary.
+2. `apply` makes those changes, but only once a member of `open-source-owners` approves it in the run under **Review deployments**; GitHub notifies them when a run waits.
+
+A night without changes needs no approval, and a newer run replaces one that still waits.
+A failed run opens the issue "Sync run failed", which the next successful run closes.
+
+The workflow can also be started by hand under Actions, where `dry-run` only prints what would change and `repos` limits the run to some repositories.
 
 `pnpm install` also sets up the git hooks in `.githooks`:
 
@@ -87,3 +94,5 @@ The workflows authenticate as the GitHub App `natron-oss-governance`, installed 
 | Organization: Members                                       | Read and write |
 
 Its client id is stored as the Actions variable `APP_CLIENT_ID` and its private key as the secret `APP_PRIVATE_KEY`.
+
+The approval comes from the environment `sync`, which has `open-source-owners` as required reviewers and only allows the branch `main`.

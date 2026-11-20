@@ -5,9 +5,6 @@ ruleset:
   signedCommits: true
   codeOwnerReview: false
 
-# Days after which an open sync pull request gets a reminder
-syncPrReminderDays: 7
-
 # Working days before the response deadline at which maintainers are notified
 responseWarningDays: 1
 

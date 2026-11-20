@@ -20,11 +20,6 @@ const responseDaysSchema = z
 
 export const configSchema = z.strictObject({
   ruleset: rulesetSchema,
-  syncPrReminderDays: z
-    .number()
-    .int()
-    .positive()
-    .describe("Days after which an open sync pull request gets a reminder"),
   overdueReminderDays: z
     .number()
     .int()

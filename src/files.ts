@@ -1,23 +1,8 @@
 import { readFileSync } from "node:fs";
-import { setTimeout as sleep } from "node:timers/promises";
+import { createPatch } from "diff";
 import type { Repo } from "./config.ts";
-import {
-  type Action,
-  APP_SLUG,
-  createCommit,
-  type LiveRepo,
-  mentions,
-  NAME,
-  ORG,
-  OWNERS_TEAM,
-  octokit,
-  orNull,
-  teamSlug,
-  teamsOf,
-} from "./github.ts";
+import { type Action, createCommit, type LiveRepo, mentions, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
 
-const BRANCH = `${NAME}/sync`;
-const TITLE = "chore: sync governance files";
 const OWNERS = `${ORG}/${OWNERS_TEAM}`;
 
 export function renderCodeowners(maintainers: string[]): string {
@@ -44,8 +29,9 @@ async function readFiles(repo: string, ref: string, paths: string[]): Promise<Ma
   return new Map(paths.map((path, index) => [path, repository[`f${index}`]?.text ?? null]));
 }
 
-export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number): Promise<Action[]> {
+export async function planFiles(repo: Repo, live: LiveRepo): Promise<Action[]> {
   const target = { owner: ORG, repo: repo.name };
+  const branch = live.default_branch!;
 
   // The files as they should be, null for a file that must not exist
   // GitHub reads CODEOWNERS from .github first, so copies elsewhere would only mislead
@@ -60,7 +46,8 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
 
   // The license text is only written when GitHub detects another license than the configured one
   // An existing file of the right license keeps its copyright line that way
-  if (live.license?.spdx_id?.toLowerCase() !== repo.license.toLowerCase()) {
+  const detected = live.license?.spdx_id;
+  if (detected?.toLowerCase() !== repo.license.toLowerCase()) {
     const { data: license } = await octokit.rest.licenses.get({ license: repo.license });
     desired.set(
       "LICENSE",
@@ -73,116 +60,49 @@ export async function planFiles(repo: Repo, live: LiveRepo, reminderDays: number
     }
   }
 
-  const paths = [...desired.keys()];
-  const differing = (files: Map<string, string | null>) =>
-    paths.filter((path) => files.get(path) !== desired.get(path));
-  const changed = differing(await readFiles(repo.name, "HEAD", paths));
-  const { data: pulls } = await octokit.rest.pulls.list({ ...target, head: `${ORG}:${BRANCH}`, state: "open" });
-  const pull = pulls[0];
-
-  // The default branch already matches, so a sync pull request that is still open has nothing left to do
+  const current = await readFiles(repo.name, "HEAD", [...desired.keys()]);
+  const changed = [...desired.keys()].filter((path) => current.get(path) !== desired.get(path));
   if (changed.length === 0) {
-    if (!pull) {
-      return [];
-    }
-    return [
-      {
-        description: `close obsolete sync pull request #${pull.number}`,
-        run: async () => {
-          await octokit.rest.pulls.update({ ...target, pull_number: pull.number, state: "closed" });
-          await octokit.rest.git.deleteRef({ ...target, ref: `heads/${BRANCH}` });
-        },
-      },
-    ];
+    return [];
   }
 
-  // An open pull request that changes exactly the differing files to their desired content only needs a nudge once it has waited too long
-  // A file that is no longer managed, such as a SECURITY.md the repository keeps, must drop out of the pull request
-  const upToDate = async (number: number) => {
-    const files = await octokit.paginate(octokit.rest.pulls.listFiles, { ...target, pull_number: number });
-    const touched = files.map((file) => file.filename).sort();
-    return (
-      touched.join() === [...changed].sort().join() && differing(await readFiles(repo.name, BRANCH, paths)).length === 0
+  // The approver sees a diff of every changed file, except for the license text, which comes unchanged from GitHub
+  const summary = changed.map((path) => {
+    if (desired.get(path) == null) {
+      return `delete ${path}`;
+    }
+    if (path === "LICENSE") {
+      return `write LICENSE with the ${repo.license} text, GitHub detects ${detected ?? "no license"}`;
+    }
+    return `${current.get(path) == null ? "add" : "update"} ${path}`;
+  });
+  const patches = changed
+    .filter((path) => desired.get(path) != null && path !== "LICENSE")
+    .map((path) =>
+      createPatch(path, current.get(path) ?? "", desired.get(path)!)
+        .split("\n")
+        .slice(2)
+        .join("\n")
+        .trimEnd(),
     );
-  };
-  if (pull && (await upToDate(pull.number))) {
-    const age = Math.floor((Date.now() - Date.parse(pull.created_at)) / 86_400_000);
-    const due = Math.min(2, Math.floor(age / reminderDays));
-    const comments = await octokit.paginate(octokit.rest.issues.listComments, { ...target, issue_number: pull.number });
-    const sent = comments.filter((comment) => comment.user?.login === `${APP_SLUG}[bot]`).length;
-    if (sent >= due) {
-      return [];
-    }
-
-    // The first reminder goes to the maintainers, the second escalates to the owners
-    const audience = sent === 0 ? mentions(repo.maintainers) : `@${OWNERS}`;
-    return [
-      {
-        description: `remind ${audience} of sync pull request #${pull.number}, open for ${age} days`,
-        run: () =>
-          octokit.rest.issues.createComment({
-            ...target,
-            issue_number: pull.number,
-            body: `${audience} this pull request has been open for ${age} days. Please review and merge it so the repository matches its governance config.`,
-          }),
-      },
-    ];
-  }
 
   return [
     {
-      description: `${pull ? "update" : "open"} sync pull request for ${changed.join(", ")}`,
+      description: `commit to ${branch}: ${summary.join(", ")}`,
+      details: patches.join("\n"),
       run: async () => {
         const sha = await createCommit(
           repo.name,
-          live.default_branch!,
+          branch,
           changed.map((path) => {
             const content = desired.get(path);
             return content == null ? { path, sha: null } : { path, content };
           }),
-          TITLE,
+          "chore: sync governance files",
         );
 
-        // Move the branch in one step, resetting it to the base first would make GitHub close the pull request
-        if (await orNull(octokit.rest.git.getRef({ ...target, ref: `heads/${BRANCH}` }))) {
-          await octokit.rest.git.updateRef({ ...target, ref: `heads/${BRANCH}`, sha, force: true });
-        } else {
-          await octokit.rest.git.createRef({ ...target, ref: `refs/heads/${BRANCH}`, sha });
-        }
-        if (pull) {
-          return;
-        }
-
-        // Requesting reviews is what notifies the maintainers and the owners
-        const { data: created } = await octokit.rest.pulls.create({
-          ...target,
-          title: TITLE,
-          head: BRANCH,
-          base: live.default_branch!,
-          body: [
-            `This pull request was opened by [${ORG}/${NAME}](https://github.com/${ORG}/${NAME}).`,
-            `It brings the governance files of this repository in line with \`repos/${repo.name}.yaml\` there.`,
-            "",
-            `Do not edit these files here: change the config in ${NAME} instead, manual changes are overwritten by the next sync.`,
-          ].join("\n"),
-        });
-        // GitHub adds the code owners as reviewers right after the pull request opens and rejects requests that collide with that, so a failed request is retried
-        for (let attempt = 1; ; attempt++) {
-          try {
-            await octokit.rest.pulls.requestReviewers({
-              ...target,
-              pull_number: created.number,
-              reviewers: repo.maintainers.filter((maintainer) => !teamSlug(maintainer)),
-              team_reviewers: teamsOf(repo.maintainers),
-            });
-            break;
-          } catch (error) {
-            if (attempt === 3) {
-              throw error;
-            }
-            await sleep(attempt * 5000);
-          }
-        }
+        // The app bypasses the ruleset, and without force the update fails if the branch moved meanwhile, so the next run tries again
+        await octokit.rest.git.updateRef({ ...target, ref: `heads/${branch}`, sha });
       },
     },
   ];

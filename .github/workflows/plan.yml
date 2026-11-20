@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
         # Explicit bash adds pipefail, so a failing plan is not hidden behind tee
         shell: bash
-        run: node src/cli.ts plan | tee plan.md
+        run: node src/cli.ts plan | tee plan.md "$GITHUB_STEP_SUMMARY"
 
       # The comment is posted by the app, with a token that is created only after the plan ran and can only comment here
       - name: Create app token for the plan comment
@@ -86,8 +86,15 @@ jobs:
           GH_TOKEN: ${{ steps.comment.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
           MARKER: "<!-- oss-governance-plan -->"
+        # A comment holds at most 65536 characters, which the diffs of a change to many repositories can exceed
         run: |
-          body="$(cat plan.md)
+          body="$(cat plan.md)"
+          if [ "${#body}" -gt 60000 ]; then
+            body="${body:0:60000}
+
+          The plan is cut off here, the full plan is in the summary of the workflow run."
+          fi
+          body="$body
 
           $MARKER"
           id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
