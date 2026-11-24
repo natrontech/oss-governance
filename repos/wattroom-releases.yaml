@@ -2,3 +2,6 @@ tier: tier-2
 maintainers:
   - janlauber
 license: AGPL-3.0
+ruleset:
+  requiredApprovals: 0
+  signedCommits: false
