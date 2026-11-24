@@ -3,7 +3,7 @@ import { loadConfig, reconcile, repoFile } from "./config.ts";
 import { planFiles } from "./files.ts";
 import { type Action, APP_SLUG, type Change, createCommit, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
 import { renderInventory } from "./inventory.ts";
-import { maintainerProblems, planProblems } from "./problems.ts";
+import { dependencyProblems, maintainerProblems, planProblems } from "./problems.ts";
 import { planResponse, RESPONSE_LABEL } from "./response.ts";
 import { renderSchemas } from "./schema.ts";
 import { planSettings } from "./settings.ts";
@@ -154,6 +154,7 @@ for (const repo of repos) {
         problems.push(...invalid);
         return { notes: ["skipped until its maintainers are fixed"] };
       }
+      problems.push(...(await dependencyProblems(repo)));
       const settings = await planSettings(repo, liveRepo, owners.id, app!.id);
       return {
         changes: [...settings.actions, ...(await planFiles(repo, liveRepo))],
@@ -168,7 +169,7 @@ for (const repo of repos) {
   }
 }
 
-// Problems fail a plan so they are fixed before merging, track turns them into issues
+// Problems of the config fail a plan so they are fixed before merging, track turns all problems into issues
 if (problems.length > 0) {
   reported = true;
   console.log(`\n### Problems\n\n${problems.map((problem) => `- ${problem.title}`).join("\n")}`);
@@ -182,6 +183,6 @@ if (!reported) {
 if (mode === "track" && process.env.GITHUB_OUTPUT) {
   appendFileSync(process.env.GITHUB_OUTPUT, `changes=${pending}\n`);
 }
-if (failed || (mode === "plan" && problems.length > 0)) {
+if (failed || (mode === "plan" && problems.some((problem) => !problem.maintainers))) {
   process.exit(1);
 }

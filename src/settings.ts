@@ -36,7 +36,8 @@ export function desiredRuleset(ruleset: Ruleset, ownersTeamId: number, appId: nu
           allowed_merge_methods: ruleset.signedCommits ? ["merge", "squash"] : ["merge", "squash", "rebase"],
           require_code_owner_review: ruleset.codeOwnerReview,
           dismiss_stale_reviews_on_push: false,
-          require_last_push_approval: false,
+          // Without required approvals this would still demand one, so it only applies on top of them
+          require_last_push_approval: ruleset.requiredApprovals > 0,
           required_review_thread_resolution: false,
           required_reviewers: [
             {
@@ -47,6 +48,8 @@ export function desiredRuleset(ruleset: Ruleset, ownersTeamId: number, appId: nu
           ],
         },
       },
+      { type: "deletion" },
+      { type: "non_fast_forward" },
       ...(ruleset.signedCommits ? [{ type: "required_signatures" }] : []),
     ],
   };
@@ -188,6 +191,25 @@ export async function planSettings(
           },
         }),
     });
+  }
+
+  // CodeQL default setup scans every pull request, which also counts as SAST for the OpenSSF Scorecard
+  // It would reject the results of a CodeQL workflow, so a repository with its own keeps that, and one without supported languages has nothing to scan
+  const { data: codeScanning } = await octokit.rest.codeScanning.getDefaultSetup(target);
+  if (codeScanning.state !== "configured" && codeScanning.languages?.length) {
+    const { repository } = await octokit.graphql<{
+      repository: { object: { entries: { object: { text?: string } | null }[] } | null };
+    }>(
+      `query ($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { object(expression: "HEAD:.github/workflows") { ... on Tree { entries { object { ... on Blob { text } } } } } } }`,
+      target,
+    );
+    const workflows = repository.object?.entries ?? [];
+    if (!workflows.some((workflow) => workflow.object?.text?.includes("github/codeql-action/analyze"))) {
+      actions.push({
+        description: "enable CodeQL default setup",
+        run: () => octokit.rest.codeScanning.updateDefaultSetup({ ...target, state: "configured" }),
+      });
+    }
   }
 
   // GitHub's own verdict on the CODEOWNERS file currently on the default branch

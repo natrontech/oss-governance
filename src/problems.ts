@@ -1,4 +1,5 @@
 import type { Config, Problem, Repo } from "./config.ts";
+import { readFiles } from "./files.ts";
 import {
   type Action,
   APP_SLUG,
@@ -51,6 +52,40 @@ export async function maintainerProblems(repo: Repo): Promise<Problem[]> {
   return problems;
 }
 
+// Config files of Dependabot and Renovate, which the OpenSSF Scorecard checks for
+const DEPENDENCY_CONFIGS = [
+  ".github/dependabot.yml",
+  ".github/dependabot.yaml",
+  "renovate.json",
+  "renovate.json5",
+  ".github/renovate.json",
+  ".github/renovate.json5",
+  ".gitlab/renovate.json",
+  ".gitlab/renovate.json5",
+  ".renovaterc",
+  ".renovaterc.json",
+  ".renovaterc.json5",
+];
+
+// The maintainers know the ecosystems of their repository, so they set up its dependency updates themselves
+// A repository without workflows, such as a docs or release repository, usually has no dependencies to update
+export async function dependencyProblems(repo: Repo): Promise<Problem[]> {
+  const configs = await readFiles(repo.name, "HEAD", DEPENDENCY_CONFIGS);
+  if (
+    [...configs.values()].some((content) => content != null) ||
+    !(await orNull(octokit.rest.repos.getContent({ owner: ORG, repo: repo.name, path: ".github/workflows" })))
+  ) {
+    return [];
+  }
+  return [
+    {
+      title: `${repo.name}: no Dependabot or Renovate config`,
+      body: "Add a [Dependabot](https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference) or Renovate config that covers the dependencies of the repository, including its GitHub Actions.",
+      maintainers: repo.maintainers,
+    },
+  ];
+}
+
 // Whoever created the repository as public or made it public, as far as its event feed of the last 30 days goes back
 async function publisherOf(repo: string): Promise<string | undefined> {
   const events = await octokit.paginate(octokit.rest.activity.listRepoEvents, { owner: ORG, repo, per_page: 100 });
@@ -76,18 +111,19 @@ export async function planProblems(problems: Problem[], config: Config): Promise
   for (const problem of problems) {
     const issue = open.find((candidate) => candidate.title === problem.title);
 
-    // The person who made an unlisted repository public knows best whether it should be listed or ignored, every other problem goes to the owners
+    // The person who made an unlisted repository public knows best whether it should be listed or ignored, and a problem without maintainers goes to the owners
     if (!issue) {
       const publisher = problem.unlisted && (await publisherOf(problem.unlisted));
+      const assigned = publisher ? [publisher] : (problem.maintainers ?? [OWNERS]);
       actions.push({
-        description: `open issue "${problem.title}" assigned to ${publisher || OWNERS}`,
+        description: `open issue "${problem.title}" assigned to ${assigned.join(", ")}`,
         run: async () =>
           octokit.rest.issues.create({
             ...target,
             title: problem.title,
             body: problem.body,
             labels: [LABEL],
-            assignees: publisher ? [publisher] : await assigneesOf([OWNERS]),
+            assignees: await assigneesOf(assigned),
           }),
       });
       continue;
