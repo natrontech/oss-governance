@@ -21,10 +21,10 @@ test("a changed value is drift", () => {
 });
 
 test("a rule added by hand is drift", () => {
-  expect(matches({ ...current, rules: [...current.rules, { type: "deletion" }] }, desired)).toBe(false);
+  expect(matches({ ...current, rules: [...current.rules, { type: "required_linear_history" }] }, desired)).toBe(false);
 });
 
 test("signed commits can be switched off", () => {
   const unsigned = desiredRuleset({ requiredApprovals: 1, signedCommits: false, codeOwnerReview: false }, 7, 9);
-  expect(unsigned.rules.map((rule) => rule.type)).toEqual(["pull_request"]);
+  expect(unsigned.rules.map((rule) => rule.type)).toEqual(["pull_request", "deletion", "non_fast_forward"]);
 });

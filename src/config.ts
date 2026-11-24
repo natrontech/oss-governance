@@ -141,7 +141,8 @@ export function loadConfig(): { config: Config; repos: Repo[]; ignored: Record<s
 }
 
 // unlisted names the public repository of a problem about a repository without a file or an ignore entry
-export type Problem = { title: string; body: string; unlisted?: string };
+// maintainers are assigned to a problem they fix in their repository, which unlike a problem of the config here does not fail a plan
+export type Problem = { title: string; body: string; unlisted?: string; maintainers?: string[] };
 
 type LiveRepo = { name: string; archived?: boolean };
 

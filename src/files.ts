@@ -18,7 +18,7 @@ export function renderCodeowners(maintainers: string[]): string {
 }
 
 // Reads several files of one ref in a single request, a missing file is null
-async function readFiles(repo: string, ref: string, paths: string[]): Promise<Map<string, string | null>> {
+export async function readFiles(repo: string, ref: string, paths: string[]): Promise<Map<string, string | null>> {
   const fields = paths.map(
     (path, index) => `f${index}: object(expression: ${JSON.stringify(`${ref}:${path}`)}) { ... on Blob { text } }`,
   );
