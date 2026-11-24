@@ -47,6 +47,9 @@ if (mode === "generate") {
 // Repository changes found by track, which the workflow passes on to the approval of the apply job
 let pending = false;
 
+// Whether anything below the heading was reported, so an empty report can say so instead of showing only its heading
+let reported = false;
+
 // Prints one section of the report and carries out the actions the mode is responsible for
 // Changes to repositories run in apply, after an approval, while tracking actions only touch this repository and run in track
 async function section(
@@ -76,6 +79,7 @@ async function section(
   } finally {
     // Actions that ran before a failure still belong in the report
     if (lines.length > 0) {
+      reported = true;
       console.log(`\n### ${title}\n\n${lines.join("\n")}`);
     }
   }
@@ -159,16 +163,21 @@ for (const repo of repos) {
     });
   } catch (error) {
     failed = true;
+    reported = true;
     console.log(`\n### ${repo.name} failed\n\n${error instanceof Error ? error.message : error}`);
   }
 }
 
 // Problems fail a plan so they are fixed before merging, track turns them into issues
 if (problems.length > 0) {
+  reported = true;
   console.log(`\n### Problems\n\n${problems.map((problem) => `- ${problem.title}`).join("\n")}`);
 }
 if (mode === "track" && !partial) {
   await section("Issues", async () => ({ tracking: await planProblems(problems, config) }));
+}
+if (!reported) {
+  console.log("\nNothing to change.");
 }
 if (mode === "track" && process.env.GITHUB_OUTPUT) {
   appendFileSync(process.env.GITHUB_OUTPUT, `changes=${pending}\n`);
