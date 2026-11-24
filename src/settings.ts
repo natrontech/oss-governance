@@ -113,7 +113,9 @@ export async function planSettings(
     });
   } else {
     const { data: current } = await octokit.rest.repos.getRepoRuleset({ ...target, ruleset_id: existing.id });
-    if (!matches(current, desired)) {
+    // GitHub hides the bypass actors from the read-only token of the pull request plan, so that plan compares the rest only
+    const comparable = current.bypass_actors ? desired : { ...desired, bypass_actors: undefined };
+    if (!matches(current, comparable)) {
       actions.push({
         description: "update ruleset",
         run: () =>
@@ -139,8 +141,9 @@ export async function planSettings(
   );
   for (const ruleset_id of blocking) {
     const { data: ruleset } = await octokit.rest.repos.getRepoRuleset({ ...target, ruleset_id });
-    const bypassActors = ruleset.bypass_actors ?? [];
-    if (!bypassActors.some((actor) => actor.actor_type === "Integration" && actor.actor_id === appId)) {
+    // Without the hidden bypass actors it is unknown whether the app may already bypass, and replacing them would drop the others
+    const bypassActors = ruleset.bypass_actors;
+    if (bypassActors && !bypassActors.some((actor) => actor.actor_type === "Integration" && actor.actor_id === appId)) {
       actions.push({
         description: `let the app bypass ruleset ${ruleset.name}`,
         run: () =>

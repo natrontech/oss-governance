@@ -9,6 +9,7 @@ The current state of all repositories is in [INVENTORY.md](INVENTORY.md).
 
 Edit `repos/<name>.yaml` and open a pull request.
 The `Plan` check comments what the change will do on GitHub, including a diff of every file it commits, and the sync runs once the pull request is merged.
+Its read-only token cannot see the bypass actors of rulesets, so changes to them only show up in the sync.
 
 ```yaml
 tier: tier-2
