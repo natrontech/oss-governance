@@ -2,5 +2,5 @@ tier: tier-1
 maintainers:
   - janfuhrer
   - nicololuescher
-license: GPL-3.0
+license: GPL-3.0 # Needs to stay on GPL-3.0 unless we ask all external contributors for a relicense
 syncSecurityPolicy: false
