@@ -3,3 +3,6 @@ maintainers:
   - janlauber
 license: AGPL-3.0
 syncSecurityPolicy: false
+ruleset:
+  requiredApprovals: 0
+  signedCommits: false
