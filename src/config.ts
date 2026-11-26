@@ -40,6 +40,23 @@ export const configSchema = z.strictObject({
     .int()
     .min(0)
     .describe("Working days before the response deadline at which maintainers are notified"),
+  archiveInactiveMonths: z
+    .number()
+    .int()
+    .positive()
+    .describe("Months without activity after which a repository is suggested for archiving"),
+  archiveNeglectedMonths: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "Months without activity after which a repository without a reachable maintainer or with long unanswered requests is suggested for archiving",
+    ),
+  archiveUnansweredDays: z
+    .number()
+    .int()
+    .positive()
+    .describe("Days an external request waits for a first response before its repository counts as neglected"),
   tiers: z.record(z.string(), z.strictObject({ license: licenseSchema, responseDays: responseDaysSchema })),
 });
 
@@ -55,6 +72,12 @@ export const repoSchema = z.strictObject({
     .boolean()
     .optional()
     .describe("Set to false to keep the repository's own SECURITY.md instead of the one from templates/SECURITY.md"),
+  keepUntil: z.iso
+    .date()
+    .optional()
+    .describe(
+      "Date until which the repository is not suggested for archiving, such as for a finished tool that is still in use",
+    ),
 });
 
 export const ignoredSchema = z.record(z.string(), z.string().min(1).describe("Why the repository is not managed"));
@@ -71,6 +94,7 @@ export type Repo = {
   responseDays: number | null;
   ruleset: Ruleset;
   syncSecurityPolicy: boolean;
+  keepUntil?: string;
 };
 
 // Applies the tier and the org-wide ruleset below the values a repository sets itself
@@ -88,6 +112,7 @@ export function resolveRepo(config: Config, name: string, archived: boolean, raw
     responseDays: raw.responseDays === undefined ? tier.responseDays : raw.responseDays,
     ruleset: { ...config.ruleset, ...raw.ruleset },
     syncSecurityPolicy: raw.syncSecurityPolicy ?? true,
+    keepUntil: raw.keepUntil,
   };
 }
 

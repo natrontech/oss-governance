@@ -25,12 +25,14 @@ ruleset:
   signedCommits: false
   codeOwnerReview: true
 syncSecurityPolicy: false # keep the repository's own SECURITY.md
+keepUntil: 2027-11-01 # not suggested for archiving before this date
 ```
 
 - A new public repository needs a file here, otherwise the sync reports it.
 - A repository that must not be managed, such as a fork, goes into `ignored.yaml` with a reason.
 - Tiers and the org-wide defaults are in `config.yaml`.
 - Archiving is done by hand on GitHub, the bot then moves the file to `repos/archived/`.
+- A finished tool that is still in use but rarely changes can set `keepUntil`, so it is not suggested for archiving before that date.
 
 ## What the sync does
 
@@ -50,6 +52,9 @@ For every active repository:
   - an issue here, assigned to the maintainers, for a repository with workflows but no Dependabot or Renovate config
   - an unlisted public repository's issue is assigned to whoever made it public, and after a day and then every three days it mentions them and the owners again
   - an issue here per repository listing external issues and pull requests that are close to or past the tier's response time without an answer from a member
+  - an issue here, assigned to the maintainers, that suggests archiving a repository:
+    - without activity for 12 months, where activity is the last commit on the default branch not made by the app, including merged Dependabot and Renovate pull requests, or the last release
+    - without activity for 6 months, if no maintainer is in the organization anymore or an external request has waited more than 90 days for a first response; the owners are assigned when a maintainer is gone
 
 A repository can add its own rulesets on top of the managed one.
 Their rules stay as they are, but the app adds itself as a bypass actor to those that would reject its commits, such as one that requires a pull request.

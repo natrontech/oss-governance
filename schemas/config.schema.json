@@ -51,6 +51,24 @@
       "maximum": 9007199254740991,
       "description": "Working days before the response deadline at which maintainers are notified"
     },
+    "archiveInactiveMonths": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Months without activity after which a repository is suggested for archiving"
+    },
+    "archiveNeglectedMonths": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Months without activity after which a repository without a reachable maintainer or with long unanswered requests is suggested for archiving"
+    },
+    "archiveUnansweredDays": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Days an external request waits for a first response before its repository counts as neglected"
+    },
     "tiers": {
       "type": "object",
       "propertyNames": {
@@ -91,6 +109,9 @@
     "unlistedFirstReminderDays",
     "unlistedReminderDays",
     "responseWarningDays",
+    "archiveInactiveMonths",
+    "archiveNeglectedMonths",
+    "archiveUnansweredDays",
     "tiers"
   ],
   "additionalProperties": false

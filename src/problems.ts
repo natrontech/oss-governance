@@ -4,6 +4,7 @@ import {
   type Action,
   APP_SLUG,
   assigneesOf,
+  type LiveRepo,
   mentions,
   NAME,
   ORG,
@@ -12,6 +13,7 @@ import {
   orNull,
   teamSlug,
 } from "./github.ts";
+import type { Item } from "./response.ts";
 
 const LABEL = "governance";
 const OWNERS = `${ORG}/${OWNERS_TEAM}`;
@@ -82,6 +84,85 @@ export async function dependencyProblems(repo: Repo): Promise<Problem[]> {
       title: `${repo.name}: no Dependabot or Renovate config`,
       body: "Add a [Dependabot](https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference) or Renovate config that covers the dependencies of the repository, including its GitHub Actions.",
       maintainers: repo.maintainers,
+    },
+  ];
+}
+
+// Why a repository should be archived, where the reasons of neglect shorten the window of inactivity and are only reported once it has passed
+export function archiveReasons(config: Config, now: Date, activity: string, neglect: string[]): string[] {
+  const months = neglect.length > 0 ? config.archiveNeglectedMonths : config.archiveInactiveMonths;
+  const cutoff = new Date(now);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
+  if (Date.parse(activity) >= cutoff.getTime()) {
+    return [];
+  }
+  return [`no activity for more than ${months} months, the last was on ${activity.slice(0, 10)}`, ...neglect];
+}
+
+// Suggests archiving to the maintainers, who decide and archive by hand, or to the owners when a maintainer is gone
+// Merged Dependabot and Renovate pull requests count as activity, the commits of the app do not, since it keeps committing to every repository
+export async function archiveProblems(
+  repo: Repo,
+  live: LiveRepo,
+  config: Config,
+  invalid: Problem[],
+  unanswered: Item[],
+): Promise<Problem[]> {
+  // The maintainers already decided to keep the repository until this date
+  const now = new Date();
+  if (repo.keepUntil && repo.keepUntil >= now.toISOString().slice(0, 10)) {
+    return [];
+  }
+
+  // The last activity is the newest commit not made by the app, or the last release for a repository that only publishes releases
+  const target = { owner: ORG, repo: repo.name };
+  let commit: string | undefined;
+  for await (const { data } of octokit.paginate.iterator(octokit.rest.repos.listCommits, {
+    ...target,
+    per_page: 100,
+  })) {
+    commit = data.find((candidate) => candidate.author?.login !== `${APP_SLUG}[bot]`)?.commit.committer?.date;
+    if (commit) {
+      break;
+    }
+  }
+  const release = (await orNull(octokit.rest.repos.getLatestRelease(target)))?.data.published_at;
+  const activity = [commit, release, live.created_at]
+    .filter((date) => date != null)
+    .sort()
+    .at(-1)!;
+
+  // A repository nobody can be reached for, or whose requests go unanswered, is neglected
+  const neglect: string[] = [];
+  if (repo.maintainers.length === 0 || invalid.length === repo.maintainers.length) {
+    neglect.push(`no maintainer is a member or team of ${ORG}`);
+  }
+  const waitingSince = new Date(now.getTime() - config.archiveUnansweredDays * 86_400_000).toISOString().slice(0, 10);
+  const waiting = unanswered.filter((item) => item.opened < waitingSince).length;
+  if (waiting > 0) {
+    neglect.push(
+      `external requests waiting more than ${config.archiveUnansweredDays} days for a first response: ${waiting}`,
+    );
+  }
+
+  // The issue lists the reasons and the context the maintainers need to decide
+  const reasons = archiveReasons(config, now, activity, neglect);
+  if (reasons.length === 0) {
+    return [];
+  }
+  return [
+    {
+      title: `${repo.name}: archive candidate`,
+      body: [
+        `[${ORG}/${repo.name}](https://github.com/${ORG}/${repo.name}) could be archived:`,
+        "",
+        ...reasons.map((reason) => `- ${reason}`),
+        "",
+        `It has ${live.stargazers_count} stars and ${live.open_issues_count} open issues and pull requests.`,
+        "Archive it on GitHub if it is no longer maintained, the bot then moves its file to `repos/archived/`.",
+        `To keep it, resume work on it or set \`keepUntil\` in \`repos/${repo.name}.yaml\` to the date when the question should come back.`,
+      ].join("\n"),
+      maintainers: invalid.length > 0 ? [OWNERS] : repo.maintainers,
     },
   ];
 }
