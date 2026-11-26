@@ -4,7 +4,7 @@ import { type Action, assigneesOf, mentions, NAME, ORG, octokit } from "./github
 export const RESPONSE_LABEL = "response-time";
 
 type Status = "due" | "overdue";
-type Item = { number: number; title: string; url: string; opened: string; status: Status };
+export type Item = { number: number; title: string; url: string; opened: string; status: Status };
 type Tracker = {
   number: number;
   title: string;
@@ -33,7 +33,7 @@ export function responseStatus(opened: Date, now: Date, responseDays: number, wa
 }
 
 // External requests that are close to or past the deadline and have no reply from a member yet
-async function unansweredItems(repo: Repo, responseDays: number, warningDays: number): Promise<Item[]> {
+export async function unansweredItems(repo: Repo, responseDays: number, warningDays: number): Promise<Item[]> {
   const target = { owner: ORG, repo: repo.name };
   const items: Item[] = [];
   const now = new Date();
@@ -77,12 +77,10 @@ export function reminderDue(lastReminder: string, today: string, reminderDays: n
 }
 
 // Keeps one tracking issue per repository and mentions the maintainers when a request changes its status, and again while requests stay overdue
-export async function planResponse(repo: Repo, config: Config, trackers: Tracker[]): Promise<Action[]> {
+export async function planResponse(repo: Repo, config: Config, trackers: Tracker[], items: Item[]): Promise<Action[]> {
   const target = { owner: ORG, repo: NAME };
   const title = `${repo.name}: external requests awaiting first response`;
   const tracker = trackers.find((issue) => issue.title === title);
-  const items =
-    repo.responseDays === null ? [] : await unansweredItems(repo, repo.responseDays, config.responseWarningDays);
 
   if (items.length === 0) {
     if (!tracker) {

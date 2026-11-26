@@ -15,6 +15,14 @@ overdueReminderDays: 7
 unlistedFirstReminderDays: 1
 unlistedReminderDays: 3
 
+# Months without activity after which an issue suggests archiving a repository
+# Activity is the last commit on the default branch not made by the app, or the last release
+archiveInactiveMonths: 12
+
+# The shorter window for a repository without a reachable maintainer or with an external request unanswered for archiveUnansweredDays
+archiveNeglectedMonths: 6
+archiveUnansweredDays: 90
+
 # responseDays are working days until a qualified first response, null means best effort
 tiers:
   tier-1:

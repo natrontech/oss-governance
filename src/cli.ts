@@ -3,8 +3,8 @@ import { loadConfig, reconcile, repoFile } from "./config.ts";
 import { planFiles } from "./files.ts";
 import { type Action, APP_SLUG, type Change, createCommit, NAME, ORG, OWNERS_TEAM, octokit } from "./github.ts";
 import { renderInventory } from "./inventory.ts";
-import { dependencyProblems, maintainerProblems, planProblems } from "./problems.ts";
-import { planResponse, RESPONSE_LABEL } from "./response.ts";
+import { archiveProblems, dependencyProblems, maintainerProblems, planProblems } from "./problems.ts";
+import { planResponse, RESPONSE_LABEL, unansweredItems } from "./response.ts";
 import { renderSchemas } from "./schema.ts";
 import { planSettings } from "./settings.ts";
 
@@ -148,8 +148,19 @@ for (const repo of repos) {
   }
   try {
     await section(repo.name, async () => {
-      // A repository without valid maintainers cannot get a valid CODEOWNERS file, so it waits for its issue to be solved
+      // The maintainers are checked first, since a repository without a reachable one is suggested for archiving sooner
       const invalid = await maintainerProblems(repo);
+
+      // External requests without a first response feed both the response tracker and the archive check, which apply does not need
+      const unanswered =
+        mode === "apply" || repo.responseDays === null
+          ? []
+          : await unansweredItems(repo, repo.responseDays, config.responseWarningDays);
+      if (mode !== "apply") {
+        problems.push(...(await archiveProblems(repo, liveRepo, config, invalid, unanswered)));
+      }
+
+      // A repository without valid maintainers cannot get a valid CODEOWNERS file, so it waits for its issue to be solved
       if (invalid.length > 0) {
         problems.push(...invalid);
         return { notes: ["skipped until its maintainers are fixed"] };
@@ -158,7 +169,7 @@ for (const repo of repos) {
       const settings = await planSettings(repo, liveRepo, owners.id, app!.id);
       return {
         changes: [...settings.actions, ...(await planFiles(repo, liveRepo))],
-        tracking: mode === "apply" ? [] : await planResponse(repo, config, trackers),
+        tracking: mode === "apply" ? [] : await planResponse(repo, config, trackers, unanswered),
         notes: settings.notes,
       };
     });
