@@ -1,108 +1,90 @@
 # oss-governance
 
-Declarative governance for the public repositories of `natrontech`.
-Each repository has a file in `repos/` that names its tier and its maintainers, and a bot keeps GitHub in line with it.
+This repository decides how we run the public repositories of `natrontech`.
+Every public repository has a small YAML file in `repos/` with its tier and its maintainers.
+A bot reads these files and makes sure that GitHub looks like this, so nobody has to click through the settings of 20 repositories by hand.
 
-The current state of all repositories is in [INVENTORY.md](INVENTORY.md).
+You find the current state of all repositories in [INVENTORY.md](INVENTORY.md).
 
 ## Changing a repository
 
-Edit `repos/<name>.yaml` and open a pull request.
-The `Plan` check comments what the change will do on GitHub, including a diff of every file it commits, and the sync runs once the pull request is merged.
-Its read-only token cannot see the bypass actors of rulesets, so changes to them only show up in the sync.
+Just edit `repos/<name>.yaml` and open a pull request.
+
+The `Plan` check writes a comment with everything the change will do on GitHub, also a diff of every file.
+After the merge, the sync does the rest.
 
 ```yaml
 tier: tier-2
 maintainers:
-  - some-user # a member of natrontech
+  - some-user # must be a member of natrontech
   - natrontech/some-team
 
-# Optional, each of these overrides the tier or the org-wide default
+# Everything below is optional and overrides the tier or the default from config.yaml
 license: GPL-3.0
-licenseReason: Needs to stay on GPL-3.0 unless all external contributors agree to a relicense # required for a license other than the tier's
-responseDays: 10 # working days, null for best effort
+licenseReason: Needs to stay on GPL-3.0 unless all external contributors agree # required if the license is not the one of the tier
+responseDays: 10 # working days until the first response, null for best effort
 ruleset:
   requiredApprovals: 0
   signedCommits: false
   codeOwnerReview: true
-syncSecurityPolicy: false # keep the repository's own SECURITY.md
-keepUntil: 2027-11-01 # not suggested for archiving before this date
+syncSecurityPolicy: false # keep the own SECURITY.md of the repository
+keepUntil: 2027-11-01 # don't suggest to archive it before this date
 ```
 
-- A new public repository needs a file here, otherwise the sync reports it.
-- A repository that must not be managed, such as a fork, goes into `ignored.yaml` with a reason.
-- Tiers and the org-wide defaults are in `config.yaml`.
-- Archiving is done by hand on GitHub, the bot then moves the file to `repos/archived/`.
-- A finished tool that is still in use but rarely changes can set `keepUntil`, so it is not suggested for archiving before that date.
+Some things good to know:
 
-## What the sync does
+- Every new public repository needs a file here, otherwise the bot opens an issue and asks for it.
+- A repository we don't want to manage, for example a fork, goes into `ignored.yaml` together with a reason.
+- To archive a repository, archive it on GitHub. The bot moves the file to `repos/archived/` by itself.
+- The `Plan` check can't see the bypass actors of rulesets, so changes to them only show up in the sync.
 
-For every active repository:
+## What the bot does
 
-- **Files**, committed by the app directly to the default branch, which it may do as a bypass actor of the ruleset:
-  - `.github/CODEOWNERS` with the maintainers and the fixed lines for `@natrontech/open-source-owners`
-  - `SECURITY.md` from `templates/SECURITY.md`, unless the repository keeps its own with `syncSecurityPolicy: false`
-  - `LICENSE`, only when GitHub detects another license than the configured one
-- **Settings**:
-  - write access for `open-source-owners` and for teams named as maintainers
-  - the ruleset `oss-governance` on the default branch, which also blocks force pushes and deletion
-  - CodeQL default setup, unless the repository has a CodeQL workflow of its own or no language CodeQL supports
-  - private vulnerability reporting, secret scanning and push protection
-- **Notifications**, as GitHub issues, assignments and mentions:
-  - an issue here for every governance problem, such as a maintainer who left the organization or an unlisted public repository
-  - an issue here, assigned to the maintainers, for a repository with workflows but no Dependabot or Renovate config
-  - an unlisted public repository's issue is assigned to whoever made it public, and after a day and then every three days it mentions them and the owners again
-  - an issue here per repository listing external issues and pull requests that are close to or past the tier's response time without an answer from a member
-  - an issue here, assigned to the maintainers, that suggests archiving a repository:
-    - without activity for 12 months, where activity is the last commit on the default branch not made by the app, including merged Dependabot and Renovate pull requests, or the last release
-    - without activity for 6 months, if no maintainer is in the organization anymore or an external request has waited more than 90 days for a first response; the owners are assigned when a maintainer is gone
+For every active repository, the bot takes care of three things.
 
-A repository can add its own rulesets on top of the managed one.
-Their rules stay as they are, but the app adds itself as a bypass actor to those that would reject its commits, such as one that requires a pull request.
-Classic branch protection is not touched, but it is reported, because it is better moved into a ruleset and it blocks the commits of the app.
-A repository that needs required status checks adds its own ruleset, GitHub combines it with the managed one.
+**Files**, which it commits directly to the default branch:
 
-## Running it locally
+- `.github/CODEOWNERS` with the maintainers
+- `SECURITY.md` from `templates/SECURITY.md`, if the repository doesn't keep its own
+- `LICENSE`, but only if GitHub detects another license than the one in the file
+
+**Settings:**
+
+- write access for `open-source-owners` and for the teams that are maintainers
+- the ruleset `oss-governance` on the default branch, which also blocks force pushes and deleting the branch
+- CodeQL default setup, if the repository has no own CodeQL workflow and a language CodeQL supports
+- private vulnerability reporting, secret scanning and push protection
+
+**Issues** in this repository, when something needs a human:
+
+- a governance problem, for example a maintainer who left the organization
+- a public repository without a file here, assigned to the person who made it public, with a reminder after one day and then every three days
+- a repository with workflows but without Dependabot or Renovate
+- external issues and pull requests that wait too long for a first response, compared to the response time of the tier
+- a repository that could be archived, because it had no activity for 12 months, or for 6 months if no maintainer is left or external requests wait for more than 90 days
+
+A repository can have its own rulesets on top, for example for required status checks, and GitHub combines them with ours.
+If one of them would block the commits of the bot, the bot adds itself as a bypass actor.
+
+## Working on the bot
 
 ```sh
 pnpm install
 GITHUB_TOKEN=$(gh auth token) pnpm plan
 ```
 
-`plan` only reads.
-`node src/cli.ts track` updates the issues here, and `node src/cli.ts apply` changes the repositories; both are meant to be run by the `Sync` workflow only.
-All of them take optional repository names to limit the run to those repositories, which skips the org-wide archive moves and governance issues.
-
-The `Sync` workflow runs after every merge to `main` and every day at 07:00 and 15:00 Zurich time, in two jobs:
-
-1. `track` updates the issues and the archive folder right away and lists the changes to repositories, with a diff of every file, in its summary.
-2. `apply` makes those changes, but only once a member of `open-source-owners` approves it in the run under **Review deployments**; GitHub notifies them when a run waits.
-
-A run without changes needs no approval, and a newer run replaces one that still waits.
-A failed run opens the issue "Sync run failed", which the next successful run closes.
-
-The workflow can also be started by hand under Actions, where `dry-run` only prints what would change and `repos` limits the run to some repositories.
-
-`pnpm install` also sets up the git hooks in `.githooks`:
-
-- `pre-commit` validates every YAML file against the schema in `src/config.ts`, regenerates `INVENTORY.md` and `schemas/` with `pnpm generate` and checks the staged files with Biome
-- `commit-msg` requires a [Conventional Commits](https://www.conventionalcommits.org) subject
-- `pre-push` runs the typecheck and the tests
-
-The `Plan` check runs the same steps and fails a pull request whose generated files are out of date, which catches commits made without the hooks, such as edits in the GitHub web editor.
-
-`pnpm format` formats and fixes the code with [Biome](https://biomejs.dev).
-The JSON Schemas in `schemas/` give editors completion and validation for the YAML files; VS Code picks them up through `.vscode/settings.json`.
+`plan` only reads, so it's safe to run it locally.
+`node src/cli.ts track` and `node src/cli.ts apply` change things on GitHub, these are only for the `Sync` workflow.
+All three accept repository names to run only for them, but then they skip the archive moves and the governance issues.
 
 ## Setup
 
-The workflows authenticate as the GitHub App `natron-oss-governance`, installed on all repositories of the organization.
+The workflows log in as the GitHub App `natron-oss-governance`, which is installed on all repositories of the organization.
 
 | Permission                                                  | Access         |
 | ----------------------------------------------------------- | -------------- |
 | Repository: Administration, Contents, Issues, Pull requests | Read and write |
 | Organization: Members                                       | Read and write |
 
-Its client id is stored as the Actions variable `APP_CLIENT_ID` and its private key as the secret `APP_PRIVATE_KEY`.
-
+The client ID of the app is in the Actions variable `APP_CLIENT_ID` and its private key in the secret `APP_PRIVATE_KEY`.
 The approval comes from the environment `sync`, which has `open-source-owners` as required reviewers and only allows the branch `main`.
