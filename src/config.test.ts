@@ -29,6 +29,7 @@ test("a repository overrides single values", () => {
     tier: "tier-1",
     maintainers: ["x"],
     license: "GPL-3.0",
+    licenseReason: "external contributions",
     responseDays: null,
     ruleset: { requiredApprovals: 0 },
   });
@@ -37,6 +38,13 @@ test("a repository overrides single values", () => {
     responseDays: null,
     ruleset: { requiredApprovals: 0, signedCommits: true, codeOwnerReview: false },
   });
+});
+
+test("another license than the tier's needs a reason, and only then", () => {
+  const repo = (license: string, licenseReason?: string) =>
+    resolveRepo(config, "a", false, { tier: "tier-1", maintainers: [], license, licenseReason });
+  expect(() => repo("GPL-3.0")).toThrow("licenseReason");
+  expect(() => repo("Apache-2.0", "stale")).toThrow("licenseReason");
 });
 
 test("an unknown tier is rejected", () => {
