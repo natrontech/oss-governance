@@ -22,6 +22,11 @@
       "type": "string",
       "description": "SPDX identifier of the license, such as Apache-2.0"
     },
+    "licenseReason": {
+      "description": "Why the repository uses another license than its tier, required whenever license differs from it",
+      "type": "string",
+      "minLength": 1
+    },
     "responseDays": {
       "anyOf": [
         {

@@ -19,6 +19,7 @@ maintainers:
 
 # Optional, each of these overrides the tier or the org-wide default
 license: GPL-3.0
+licenseReason: Needs to stay on GPL-3.0 unless all external contributors agree to a relicense # required for a license other than the tier's
 responseDays: 10 # working days, null for best effort
 ruleset:
   requiredApprovals: 0

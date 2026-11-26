@@ -2,6 +2,7 @@ tier: tier-2
 maintainers:
   - janlauber
 license: AGPL-3.0
+licenseReason: AGPL-3.0 makes hosted versions publish their changes, which protects wattroom from closed SaaS forks
 syncSecurityPolicy: false
 ruleset:
   requiredApprovals: 0

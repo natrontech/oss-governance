@@ -66,6 +66,11 @@ export const repoSchema = z.strictObject({
     .array(z.string())
     .describe("GitHub users who are members of natrontech, or teams written as natrontech/<slug>"),
   license: licenseSchema.optional(),
+  licenseReason: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Why the repository uses another license than its tier, required whenever license differs from it"),
   responseDays: responseDaysSchema.optional(),
   ruleset: rulesetSchema.partial().optional().describe("Overrides of the org-wide ruleset in config.yaml"),
   syncSecurityPolicy: z
@@ -102,6 +107,14 @@ export function resolveRepo(config: Config, name: string, archived: boolean, raw
   const tier = config.tiers[raw.tier];
   if (!tier) {
     throw new Error(`${repoFile(name, archived)}: unknown tier ${raw.tier}`);
+  }
+
+  // Another license than the tier's needs a documented reason, which the owners approve as code owners of this repository
+  const otherLicense = raw.license !== undefined && raw.license !== tier.license;
+  if (otherLicense !== (raw.licenseReason !== undefined)) {
+    throw new Error(
+      `${repoFile(name, archived)}: licenseReason is required if and only if license differs from ${tier.license} of ${raw.tier}`,
+    );
   }
   return {
     name,
